@@ -6,6 +6,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 
 #include "leveldb/cache.h"
 #include "leveldb/db.h"
@@ -43,21 +44,32 @@
 //      heapprofile -- Dump a heap profile (if supported by this port)
 static const char* FLAGS_benchmarks =
     "fillseq,"
+    //"stats,"
+    //"sstables,"
+    //"heapprofile,"
     "fillsync,"
+    //"stats,"
     "fillrandom,"
+    //"stats,"
     "overwrite,"
     "readrandom,"
     "readrandom,"  // Extra run to allow previous compactions to quiesce
     "readseq,"
     "readreverse,"
+    // "stats,"
     "compact,"
+    // "stats,"
     "readrandom,"
     "readseq,"
     "readreverse,"
     "fill100K,"
     "crc32c,"
     "snappycomp,"
-    "snappyuncomp,";
+    "snappyuncomp,"
+    "writerandomburstsbytime,"
+    "writerandomburstsbycount,"
+    "writeseqburstsbytime,"
+    "writeseqburstsbycount";
 
 // Number of key/values to place in database
 static int FLAGS_num = 1000000;
@@ -111,6 +123,11 @@ static bool FLAGS_reuse_logs = false;
 
 // Use the db with the following name.
 static const char* FLAGS_db = nullptr;
+
+static int FLAGS_workload_duration = 120;
+static int FLAGS_write_time_before_sleep = 10;
+static int FLAGS_sleep_duration = 2;
+static int FLAGS_write_count_before_sleep = 10000;
 
 namespace leveldb {
 
@@ -520,7 +537,16 @@ class Benchmark {
         PrintStats("leveldb.stats");
       } else if (name == Slice("sstables")) {
         PrintStats("leveldb.sstables");
-      } else {
+      } else if (name == Slice("writerandomburstsbytime")) {
+        method = &Benchmark::WriteRandomBurstsByTime;
+      } else if (name == Slice("writerandomburstsbycount")) {
+        method = &Benchmark::WriteRandomBurstsByCount;
+      } else if (name == Slice("writeseqburstsbytime")) {
+        method = &Benchmark::WriteSeqBurstsByTime;
+      } else if (name == Slice("writeseqburstsbycount")) {
+        method = &Benchmark::WriteSeqBurstsByCount;
+      }
+      else {
         if (!name.empty()) {  // No error message for empty name
           std::fprintf(stderr, "unknown benchmark '%s'\n",
                        name.ToString().c_str());
@@ -746,6 +772,87 @@ class Benchmark {
     thread->stats.AddBytes(bytes);
   }
 
+  void WriteRandomBurstsByTime(ThreadState* thread) {
+    WriteInBurstsTime(thread, false);
+  }
+
+  void WriteRandomBurstsByCount(ThreadState* thread) {
+    WriteInBurstsCount(thread, false);
+  }
+
+  void WriteSeqBurstsByTime(ThreadState* thread) {
+    WriteInBurstsTime(thread, true);
+  }
+
+  void WriteSeqBurstsByCount(ThreadState* thread) {
+    WriteInBurstsCount(thread, true);
+  }
+
+  // Function to simulate periodic / bursts of writes based on write period and sleep period
+  void WriteInBurstsTime(ThreadState* thread, bool seq) {
+      RandomGenerator gen;
+      WriteBatch batch;
+      Status s;
+      int64_t bytes = 0;
+      int64_t i = 0;
+      double current_time = g_env->NowMicros();
+      while (g_env->NowMicros() < current_time + FLAGS_workload_duration*pow(10, 6)) {
+        double time = g_env->NowMicros();
+        while (g_env->NowMicros() < time + FLAGS_write_time_before_sleep*pow(10, 6)) {
+            batch.Clear();
+            for (int j = 0; j < entries_per_batch_; j++) {
+              const int k = seq ? i : (thread->rand.Next() % FLAGS_num);
+              char key[100];
+              std::snprintf(key, sizeof(key), "%016d", k);
+              batch.Put(key, gen.Generate(value_size_));
+              bytes += value_size_ + strlen(key);
+              thread->stats.FinishedSingleOp();
+            }
+            s = db_->Write(write_options_, &batch);
+            if (!s.ok()) {
+              std::fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+              std::exit(1);
+            }
+          }
+          sleep(FLAGS_sleep_duration);
+        }
+      thread->stats.AddBytes(bytes);
+      printf("Total data written = %.1f MB \n", bytes / pow(10, 6));
+  }
+
+  // Function to simulate periodic / bursts of writes based on number of writes
+  void WriteInBurstsCount(ThreadState* thread, bool seq) {
+      int i = 0;
+      RandomGenerator gen;
+      WriteBatch batch;
+      Status s;
+      int64_t bytes = 0;
+      while (i < num_) {
+        int current_writes = 0;
+        while (current_writes < FLAGS_write_count_before_sleep) {
+          batch.Clear();
+          for (int j = 0; j < entries_per_batch_; j++) {
+            const int k = seq ? i + j : (thread->rand.Next() % FLAGS_num);
+            char key[100];
+            std::snprintf(key, sizeof(key), "%016d", k);
+            batch.Put(key, gen.Generate(value_size_));
+            bytes += value_size_ + strlen(key);
+            thread->stats.FinishedSingleOp();
+          }
+          s = db_->Write(write_options_, &batch);
+          if (!s.ok()) {
+            std::fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+            std::exit(1);
+          }
+          current_writes += entries_per_batch_;
+        }
+        sleep(FLAGS_sleep_duration);
+        i += FLAGS_write_count_before_sleep;
+      }
+      thread->stats.AddBytes(bytes);
+      printf("Total data written = %.1f MB \n", bytes / pow(10, 6));
+  }
+
   void ReadSequential(ThreadState* thread) {
     Iterator* iter = db_->NewIterator(ReadOptions());
     int i = 0;
@@ -967,7 +1074,16 @@ int main(int argc, char** argv) {
       FLAGS_bloom_bits = n;
     } else if (sscanf(argv[i], "--open_files=%d%c", &n, &junk) == 1) {
       FLAGS_open_files = n;
-    } else if (strncmp(argv[i], "--db=", 5) == 0) {
+    } else if (sscanf(argv[i], "--workload_duration=%d%c", &n, &junk) == 1) {
+      FLAGS_workload_duration = n;
+    } else if (sscanf(argv[i], "--sleep_duration=%d%c", &n, &junk) == 1) {
+      FLAGS_sleep_duration = n;
+    } else if (sscanf(argv[i], "--write_time_before_sleep=%d%c", &n, &junk) == 1) {
+      FLAGS_write_time_before_sleep = n;
+    } else if (sscanf(argv[i], "--write_count_before_sleep=%d%c", &n, &junk) == 1) {
+      FLAGS_write_count_before_sleep = n;
+    }
+    else if (strncmp(argv[i], "--db=", 5) == 0) {
       FLAGS_db = argv[i] + 5;
     } else {
       std::fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
@@ -983,6 +1099,8 @@ int main(int argc, char** argv) {
     default_db_path += "/dbbench";
     FLAGS_db = default_db_path.c_str();
   }
+  using namespace std;
+  cout << FLAGS_db << endl;
 
   leveldb::Benchmark benchmark;
   benchmark.Run();
