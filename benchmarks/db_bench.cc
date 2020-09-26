@@ -7,6 +7,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <thread>
+#include <fstream>
 
 #include "leveldb/cache.h"
 #include "leveldb/db.h"
@@ -790,12 +792,22 @@ class Benchmark {
 
   // Function to simulate periodic / bursts of writes based on write period and sleep period
   void WriteInBurstsTime(ThreadState* thread, bool seq) {
+      std::ofstream stats_file;
+      stats_file.open("foreground_stats.csv");
+      stats_file << "time," << "writes," << "reads," << "throughput," << std::endl;
+      double prev_bytes = 0;
+      double prev_time = g_env->NowMicros();
+      double prev_writes = 0;
+      double total_writes = 0;
+      std::thread th(CollectStats, &db_);
+      sleep(1);
       RandomGenerator gen;
       WriteBatch batch;
       Status s;
       int64_t bytes = 0;
       int64_t i = 0;
       double current_time = g_env->NowMicros();
+      prev_time = g_env->NowMicros();
       while (g_env->NowMicros() < current_time + FLAGS_workload_duration*pow(10, 6)) {
         double time = g_env->NowMicros();
         while (g_env->NowMicros() < time + FLAGS_write_time_before_sleep*pow(10, 6)) {
@@ -813,10 +825,22 @@ class Benchmark {
               std::fprintf(stderr, "put error: %s\n", s.ToString().c_str());
               std::exit(1);
             }
+            total_writes += 1;
+            time = g_env->NowMicros();
+            if (time > prev_time + 1000000.0) {
+                double throughput = (bytes - prev_bytes) / (time - prev_time);
+                double writes = total_writes - prev_writes;
+                stats_file << std::to_string(writes) << "," << std::to_string(throughput) << "," << std::endl;
+                prev_writes = total_writes;
+                prev_bytes = bytes;
+                prev_time = time;
+            }
+
           }
           sleep(FLAGS_sleep_duration);
         }
       thread->stats.AddBytes(bytes);
+      th.join();
       printf("Total data written = %.1f MB \n", bytes / pow(10, 6));
   }
 
@@ -1027,28 +1051,34 @@ class Benchmark {
     }
   }
 
-};
-
-}  // namespace leveldb
-#include <fstream>
-
-void collect_stats(leveldb::DB** db) {
+  static void CollectStats(leveldb::DB** db) {
     leveldb::DB* db1 = *db;
     printf("In the collect stats thread\n");
     std::ofstream myfile;
-    myfile.open("stats.csv");
-    myfile << "time" << "mayBeScheduleCompactionCount" << "memoryUsage" << std::endl;
+    myfile.open("background_stats.csv");
+    myfile << "time," << "mayBeScheduleCompactionCount," << "compactionScheduledCount," << "memoryUsage," << "levelWiseData" << std::endl;
     double current_time = leveldb::g_env->NowMicros();
-    while (leveldb::g_env->NowMicros() < current_time + 5*pow(10, 6)) {
-      std::string val;
-      bool status = db1->GetProperty(leveldb::Slice("leveldb.mayBeScheduleCompactionCount"), &val);
-      printf("mayBeScheduleCompactionCount = %s\n", val.c_str());
-      myfile << std::to_string(leveldb::g_env->NowMicros()) << val.c_str() << "0" << std::endl;
+    while (leveldb::g_env->NowMicros() < current_time + FLAGS_workload_duration*pow(10, 6)) {
+      std::string maybe_count;
+      bool status = db1->GetProperty(leveldb::Slice("leveldb.may-be-schedule-compaction-count"), &maybe_count);
+      std::string scheduled_count;
+      status = db1->GetProperty(leveldb::Slice("leveldb.compaction-scheduled-count"), &scheduled_count);
+      std::string memory_usage;
+      status = db1->GetProperty(leveldb::Slice("leveldb.approximate-memory-usage"), &memory_usage);
+      std::string sstables;
+      status = db1->GetProperty(leveldb::Slice("leveldb.sstables"), &sstables);
+      std::string level_wise_data;
+      status = db1->GetProperty(leveldb::Slice("leveldb.level-wise-data"), &level_wise_data);
+      //printf("sstables = %s\n", sstables.c_str());
+      myfile << std::to_string(leveldb::g_env->NowMicros()) << "," << maybe_count.c_str() << "," << scheduled_count << "," << \
+      std::to_string((std::stod(memory_usage) / 1048576.0)).c_str() << "," << level_wise_data << "," << std::endl;
       sleep(1);
-    }
+  }
 }
 
-#include<thread>
+};
+
+}  // namespace leveldb
 
 void tester() {
     leveldb::DB* db;
@@ -1057,15 +1087,15 @@ void tester() {
     options.create_if_missing = true;
     s = leveldb::DB::Open(options, "/tmp/levedb", &db);
     assert(s.ok());
-    std::thread th(collect_stats, &db);
+    //std::thread th(leveldb::Benchmark::collect_stats, &db);
     sleep(1);
     double current_time = leveldb::g_env->NowMicros();
-    for (int i = 0; i < 30; i++) {
+    for (int i = 0; i < 100; i++) {
         leveldb::Slice key = std::to_string(i);
         leveldb::Slice value = "one";
         s = db->Put(leveldb::WriteOptions(), key, value);
     }
-    th.join();
+    //th.join();
     return;
 }
 
@@ -1131,8 +1161,8 @@ int main(int argc, char** argv) {
   }
 
   leveldb::g_env = leveldb::Env::Default();
-  tester();
-  return 0;
+  //tester();
+  //return 0;
 
   // Choose a location for the test database if none given with --db=<path>
   if (FLAGS_db == nullptr) {
@@ -1140,8 +1170,7 @@ int main(int argc, char** argv) {
     default_db_path += "/dbbench";
     FLAGS_db = default_db_path.c_str();
   }
-  using namespace std;
-  cout << FLAGS_db << endl;
+  std::cout << FLAGS_db << std::endl;
 
   leveldb::Benchmark benchmark;
   benchmark.Run();

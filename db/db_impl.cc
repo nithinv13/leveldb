@@ -38,7 +38,8 @@
 
 namespace leveldb {
 
-int mayBeScheduleCompactionCount = 0;
+int may_be_schedule_compaction_count = 0;
+int compaction_scheduled_count = 0;
 
 const int kNumNonTableCacheFiles = 10;
 
@@ -658,8 +659,8 @@ void DBImpl::RecordBackgroundError(const Status& s) {
 }
 
 void DBImpl::MaybeScheduleCompaction() {
-  printf("May be schedule compaction called now\n");
-  mayBeScheduleCompactionCount += 1;
+  //printf("May be schedule compaction called now\n");
+  may_be_schedule_compaction_count += 1;
   mutex_.AssertHeld();
   if (background_compaction_scheduled_) {
     // Already scheduled
@@ -671,6 +672,7 @@ void DBImpl::MaybeScheduleCompaction() {
              !versions_->NeedsCompaction()) {
     // No work to be done
   } else {
+    compaction_scheduled_count += 1;
     background_compaction_scheduled_ = true;
     env_->Schedule(&DBImpl::BGWork, this);
   }
@@ -1198,7 +1200,7 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
-  printf("Going to write now\n");
+  //printf("Going to write now\n");
   Writer w(&mutex_);
   w.batch = updates;
   w.sync = options.sync;
@@ -1324,7 +1326,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 // REQUIRES: mutex_ is held
 // REQUIRES: this thread is currently at the front of the writer queue
 Status DBImpl::MakeRoomForWrite(bool force) {
-  printf("In make room for write method\n");
+  //printf("In make room for write method\n");
   mutex_.AssertHeld();
   assert(!writers_.empty());
   bool allow_delay = !force;
@@ -1381,7 +1383,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
       force = false;  // Do not force another compaction if have room
-      printf("Trying to schedule compaction in else of make room for write");
+      //printf("Trying to schedule compaction in else of make room for write");
       MaybeScheduleCompaction();
     }
   }
@@ -1445,11 +1447,25 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
                   static_cast<unsigned long long>(total_usage));
     value->append(buf);
     return true;
-  }
-
-
-  if (in == "mayBeScheduleCompactionCount") {
-    *value = std::to_string(mayBeScheduleCompactionCount);
+  } else if (in == "may-be-schedule-compaction-count") {
+    *value = std::to_string(may_be_schedule_compaction_count);
+  } else if (in == "compaction-scheduled-count") {
+    *value = std::to_string(compaction_scheduled_count);
+  } 
+  else if (in == "level-wise-data") {
+    char buf[200];
+    for (int level = 0; level < config::kNumLevels; level++) {
+      int files = versions_->NumLevelFiles(level);
+      if (stats_[level].micros > 0 || files > 0) {
+        std::snprintf(buf, sizeof(buf), "%d:%d:%.3f:%.3f:%.3f:%.3f::",
+                      level, files, versions_->NumLevelBytes(level) / 1048576.0,
+                      stats_[level].micros / 1e6,
+                      stats_[level].bytes_read / 1048576.0,
+                      stats_[level].bytes_written / 1048576.0);
+        value->append(buf);
+      }
+    }
+    return true;
   }
 
   return false;
@@ -1471,10 +1487,6 @@ void DBImpl::GetApproximateSizes(const Range* range, int n, uint64_t* sizes) {
   }
 
   v->Unref();
-}
-
-int DBImpl::GetGlobalStats() {
-    return mayBeScheduleCompactionCount;
 }
 
 // Default implementations of convenience methods that subclasses of DB
