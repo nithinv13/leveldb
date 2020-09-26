@@ -35,7 +35,10 @@
 #include "util/logging.h"
 #include "util/mutexlock.h"
 
+
 namespace leveldb {
+
+int mayBeScheduleCompactionCount = 0;
 
 const int kNumNonTableCacheFiles = 10;
 
@@ -619,6 +622,7 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,
          bg_error_.ok()) {
     if (manual_compaction_ == nullptr) {  // Idle
       manual_compaction_ = &manual;
+      printf("Calling may be schedule compaction from test compact range\n");
       MaybeScheduleCompaction();
     } else {  // Running either my compaction or another compaction.
       background_work_finished_signal_.Wait();
@@ -655,6 +659,8 @@ void DBImpl::RecordBackgroundError(const Status& s) {
 }
 
 void DBImpl::MaybeScheduleCompaction() {
+  printf("May be schedule compaction called now\n");
+  mayBeScheduleCompactionCount += 1;
   mutex_.AssertHeld();
   if (background_compaction_scheduled_) {
     // Already scheduled
@@ -690,6 +696,7 @@ void DBImpl::BackgroundCall() {
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
+  printf("Calling may be schedule compaction from background call\n");
   MaybeScheduleCompaction();
   background_work_finished_signal_.SignalAll();
 }
@@ -1169,6 +1176,7 @@ Iterator* DBImpl::NewIterator(const ReadOptions& options) {
 void DBImpl::RecordReadSample(Slice key) {
   MutexLock l(&mutex_);
   if (versions_->current()->RecordReadSample(key)) {
+    printf("Calling may be schedule compaction from record read sample\n");
     MaybeScheduleCompaction();
   }
 }
@@ -1193,6 +1201,7 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
+  printf("Going to write now\n");
   Writer w(&mutex_);
   w.batch = updates;
   w.sync = options.sync;
@@ -1318,6 +1327,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 // REQUIRES: mutex_ is held
 // REQUIRES: this thread is currently at the front of the writer queue
 Status DBImpl::MakeRoomForWrite(bool force) {
+  printf("In make room for write method\n");
   mutex_.AssertHeld();
   assert(!writers_.empty());
   bool allow_delay = !force;
@@ -1374,6 +1384,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
       force = false;  // Do not force another compaction if have room
+      printf("Trying to schedule compaction in else of make room for write");
       MaybeScheduleCompaction();
     }
   }
@@ -1439,6 +1450,11 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     return true;
   }
 
+
+  if (in == "mayBeScheduleCompactionCount") {
+    *value = std::to_string(mayBeScheduleCompactionCount);
+  }
+
   return false;
 }
 
@@ -1460,6 +1476,10 @@ void DBImpl::GetApproximateSizes(const Range* range, int n, uint64_t* sizes) {
   v->Unref();
 }
 
+int DBImpl::GetGlobalStats() {
+    return mayBeScheduleCompactionCount;
+}
+
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
 Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
@@ -1477,6 +1497,7 @@ Status DB::Delete(const WriteOptions& opt, const Slice& key) {
 DB::~DB() = default;
 
 Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
+  printf("Opening the DB now\n");
   *dbptr = nullptr;
 
   DBImpl* impl = new DBImpl(options, dbname);
@@ -1507,6 +1528,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   }
   if (s.ok()) {
     impl->RemoveObsoleteFiles();
+    printf("Calling may be schedule compaction after opening\n");
     impl->MaybeScheduleCompaction();
   }
   impl->mutex_.Unlock();

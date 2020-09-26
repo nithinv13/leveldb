@@ -1026,9 +1026,43 @@ class Benchmark {
       g_env->RemoveFile(fname);
     }
   }
+
 };
 
 }  // namespace leveldb
+
+void collect_stats(leveldb::DB** db) {
+    leveldb::DB* db1 = *db;
+    printf("In the collect stats thread\n");
+    double current_time = leveldb::g_env->NowMicros();
+    while (leveldb::g_env->NowMicros() < current_time + 5*pow(10, 6)) {
+      std::string val;
+      bool status = db1->GetProperty(leveldb::Slice("leveldb.mayBeScheduleCompactionCount"), &val);
+      printf("mayBeScheduleCompactionCount = %s\n", val.c_str());
+      fflush(stdout);
+      sleep(1);
+    }
+}
+
+#include<thread>
+
+void tester() {
+    leveldb::DB* db;
+    leveldb::Status s;
+    leveldb::Options options;
+    options.create_if_missing = true;
+    s = leveldb::DB::Open(options, "/tmp/levedb", &db);
+    assert(s.ok());
+    std::thread th(collect_stats, &db);
+    double current_time = leveldb::g_env->NowMicros();
+    for (int i = 0; i < 30; i++) {
+        leveldb::Slice key = std::to_string(i);
+        leveldb::Slice value = "one";
+        s = db->Put(leveldb::WriteOptions(), key, value);
+    }
+    th.join();
+    return;
+}
 
 int main(int argc, char** argv) {
   FLAGS_write_buffer_size = leveldb::Options().write_buffer_size;
@@ -1092,6 +1126,8 @@ int main(int argc, char** argv) {
   }
 
   leveldb::g_env = leveldb::Env::Default();
+  tester();
+  return 0;
 
   // Choose a location for the test database if none given with --db=<path>
   if (FLAGS_db == nullptr) {

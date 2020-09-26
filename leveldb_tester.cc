@@ -5,13 +5,24 @@
 
 using namespace std;
 
+void tester(leveldb::DB* db) {
+    leveldb::Status s;
+    leveldb::Slice key = "1";
+    leveldb::Slice val = "one";
+    s = db->Put(leveldb::WriteOptions(), key, value);
+    return;
+}
+
 int main(int args, char** argv) {
     leveldb::DB* db;
     leveldb::Options options;
     options.create_if_missing = true;
     // options.error_if_exists = true;
-    leveldb::Status status = leveldb::DB::Open(options, "/tmp/wisckeydb", &db);
+    leveldb::Status status = leveldb::DB::Open(options, "/tmp/levedb", &db);
     assert(status.ok());
+
+    tester(db);
+    return 0;
     leveldb::Slice key = "1";
     leveldb::Slice val = "one";
     leveldb::Status s;
