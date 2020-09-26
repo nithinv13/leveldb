@@ -622,7 +622,6 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,
          bg_error_.ok()) {
     if (manual_compaction_ == nullptr) {  // Idle
       manual_compaction_ = &manual;
-      printf("Calling may be schedule compaction from test compact range\n");
       MaybeScheduleCompaction();
     } else {  // Running either my compaction or another compaction.
       background_work_finished_signal_.Wait();
@@ -696,7 +695,6 @@ void DBImpl::BackgroundCall() {
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
-  printf("Calling may be schedule compaction from background call\n");
   MaybeScheduleCompaction();
   background_work_finished_signal_.SignalAll();
 }
@@ -1176,7 +1174,6 @@ Iterator* DBImpl::NewIterator(const ReadOptions& options) {
 void DBImpl::RecordReadSample(Slice key) {
   MutexLock l(&mutex_);
   if (versions_->current()->RecordReadSample(key)) {
-    printf("Calling may be schedule compaction from record read sample\n");
     MaybeScheduleCompaction();
   }
 }
@@ -1528,7 +1525,6 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   }
   if (s.ok()) {
     impl->RemoveObsoleteFiles();
-    printf("Calling may be schedule compaction after opening\n");
     impl->MaybeScheduleCompaction();
   }
   impl->mutex_.Unlock();

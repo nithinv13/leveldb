@@ -1030,16 +1030,20 @@ class Benchmark {
 };
 
 }  // namespace leveldb
+#include <fstream>
 
 void collect_stats(leveldb::DB** db) {
     leveldb::DB* db1 = *db;
     printf("In the collect stats thread\n");
+    std::ofstream myfile;
+    myfile.open("stats.csv");
+    myfile << "time" << "mayBeScheduleCompactionCount" << "memoryUsage" << std::endl;
     double current_time = leveldb::g_env->NowMicros();
     while (leveldb::g_env->NowMicros() < current_time + 5*pow(10, 6)) {
       std::string val;
       bool status = db1->GetProperty(leveldb::Slice("leveldb.mayBeScheduleCompactionCount"), &val);
       printf("mayBeScheduleCompactionCount = %s\n", val.c_str());
-      fflush(stdout);
+      myfile << std::to_string(leveldb::g_env->NowMicros()) << val.c_str() << "0" << std::endl;
       sleep(1);
     }
 }
@@ -1054,6 +1058,7 @@ void tester() {
     s = leveldb::DB::Open(options, "/tmp/levedb", &db);
     assert(s.ok());
     std::thread th(collect_stats, &db);
+    sleep(1);
     double current_time = leveldb::g_env->NowMicros();
     for (int i = 0; i < 30; i++) {
         leveldb::Slice key = std::to_string(i);
