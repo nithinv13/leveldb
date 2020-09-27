@@ -794,7 +794,7 @@ class Benchmark {
   void WriteInBurstsTime(ThreadState* thread, bool seq) {
       std::ofstream stats_file;
       stats_file.open("foreground_stats.csv");
-      stats_file << "time," << "writes," << "reads," << "throughput," << std::endl;
+      stats_file << "time," << "writes," << "throughput," << std::endl;
       double prev_bytes = 0;
       double prev_time = g_env->NowMicros();
       double prev_writes = 0;
@@ -826,14 +826,14 @@ class Benchmark {
               std::exit(1);
             }
             total_writes += 1;
-            time = g_env->NowMicros();
-            if (time > prev_time + 1000000.0) {
-                double throughput = (bytes - prev_bytes) / (time - prev_time);
+            double log_time = g_env->NowMicros();
+            if (log_time > prev_time + 1000000.0) {
+                double throughput = (bytes - prev_bytes) / (log_time - prev_time);
                 double writes = total_writes - prev_writes;
-                stats_file << std::to_string(writes) << "," << std::to_string(throughput) << "," << std::endl;
+                stats_file << std::to_string(log_time) << "," << std::to_string(writes) << "," << std::to_string(throughput) << "," << std::endl;
                 prev_writes = total_writes;
                 prev_bytes = bytes;
-                prev_time = time;
+                prev_time = log_time;
             }
 
           }
