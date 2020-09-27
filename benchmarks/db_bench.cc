@@ -827,7 +827,7 @@ class Benchmark {
             }
             total_writes += 1;
             double log_time = g_env->NowMicros();
-            if (log_time > prev_time + 1000000.0) {
+            if (log_time > prev_time + 250000.0) {
                 double throughput = (bytes - prev_bytes) / (log_time - prev_time);
                 double writes = total_writes - prev_writes;
                 stats_file << std::to_string(log_time) << "," << std::to_string(writes) << "," << std::to_string(throughput) << "," << std::endl;
@@ -1058,6 +1058,7 @@ class Benchmark {
     myfile.open("background_stats.csv");
     myfile << "time," << "mayBeScheduleCompactionCount," << "compactionScheduledCount," << "memoryUsage," << "levelWiseData" << std::endl;
     double current_time = leveldb::g_env->NowMicros();
+    double prev_compaction = 0;
     while (leveldb::g_env->NowMicros() < current_time + FLAGS_workload_duration*pow(10, 6)) {
       std::string maybe_count;
       bool status = db1->GetProperty(leveldb::Slice("leveldb.may-be-schedule-compaction-count"), &maybe_count);
@@ -1070,9 +1071,10 @@ class Benchmark {
       std::string level_wise_data;
       status = db1->GetProperty(leveldb::Slice("leveldb.level-wise-data"), &level_wise_data);
       //printf("sstables = %s\n", sstables.c_str());
-      myfile << std::to_string(leveldb::g_env->NowMicros()) << "," << maybe_count.c_str() << "," << scheduled_count << "," << \
+      myfile << std::to_string(leveldb::g_env->NowMicros()) << "," << maybe_count.c_str() << "," << std::to_string(std::stod(scheduled_count)-prev_compaction) << "," << \
       std::to_string((std::stod(memory_usage) / 1048576.0)).c_str() << "," << level_wise_data << "," << std::endl;
-      sleep(1);
+      prev_compaction = std::stod(scheduled_count);
+      sleep(0.25);
   }
 }
 
