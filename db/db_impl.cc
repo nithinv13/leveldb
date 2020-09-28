@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <thread>
 
 #include "db/builder.h"
 #include "db/db_iter.h"
@@ -40,6 +41,11 @@ namespace leveldb {
 
 int may_be_schedule_compaction_count = 0;
 int compaction_scheduled_count = 0;
+double total_data = 0;
+double prev_data = 0;
+double throughput = 0;
+size_t write_buffer_size = 4*1024*1024;
+double WORKLOAD_DURATION = 60000000;
 
 const int kNumNonTableCacheFiles = 10;
 
@@ -151,7 +157,10 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       background_compaction_scheduled_(false),
       manual_compaction_(nullptr),
       versions_(new VersionSet(dbname_, &options_, table_cache_,
-                               &internal_comparator_)) {}
+                               &internal_comparator_)) {
+                                 std::thread th(&DBImpl::UpdateThroughput, this);
+                                 th.detach();
+                               }
 
 DBImpl::~DBImpl() {
   // Wait for background work to finish.
@@ -891,6 +900,16 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
 
+void DBImpl::UpdateThroughput() {
+  int interval = 1000;
+  double start_time = env_->NowMicros();
+  while (env_->NowMicros() < start_time + WORKLOAD_DURATION) {
+    throughput = (total_data - prev_data)*1000 / (interval*1048576);
+    prev_data = total_data;
+    std::this_thread::sleep_for(std::chrono::milliseconds(interval));
+  }
+}
+
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
@@ -1206,6 +1225,11 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   w.sync = options.sync;
   w.done = false;
 
+  total_data += updates->ApproximateSize();
+  //printf("update data: %lu\n", updates->ApproximateSize());
+  //printf("Total data: %f\n", total_data);
+  //printf("Throughput: %f\n", throughput);
+
   MutexLock l(&mutex_);
   writers_.push_back(&w);
   while (!w.done && &w != writers_.front()) {
@@ -1331,6 +1355,13 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   assert(!writers_.empty());
   bool allow_delay = !force;
   Status s;
+
+  if (!force && (mem_->ApproximateMemoryUsage() <= write_buffer_size)) {
+    if (throughput > 3.0 and write_buffer_size < 16*1024*1024) {
+      write_buffer_size += 4*1024*1024;
+    }
+  }
+
   while (true) {
     if (!bg_error_.ok()) {
       // Yield previous error
@@ -1350,7 +1381,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
     } else if (!force &&
-               (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
+               (mem_->ApproximateMemoryUsage() <= write_buffer_size)) {
       // There is room in current memtable
       break;
     } else if (imm_ != nullptr) {

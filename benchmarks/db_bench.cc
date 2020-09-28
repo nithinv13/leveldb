@@ -1074,7 +1074,7 @@ class Benchmark {
       myfile << std::to_string(leveldb::g_env->NowMicros()) << "," << maybe_count.c_str() << "," << std::to_string(std::stod(scheduled_count)-prev_compaction) << "," << \
       std::to_string((std::stod(memory_usage) / 1048576.0)).c_str() << "," << level_wise_data << "," << std::endl;
       prev_compaction = std::stod(scheduled_count);
-      sleep(0.25);
+      sleep(1);
   }
 }
 
