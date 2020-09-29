@@ -789,6 +789,10 @@ void DBImpl::BackgroundCompaction() {
     }
     manual_compaction_ = nullptr;
   }
+
+  if (mem_->ApproximateMemoryUsage() < write_buffer_size) {
+    write_buffer_size = 4*1024*1024;
+  }
 }
 
 void DBImpl::CleanupCompaction(CompactionState* compact) {
@@ -901,6 +905,7 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 }
 
 void DBImpl::UpdateThroughput() {
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
   int interval = 1000;
   double start_time = env_->NowMicros();
   while (env_->NowMicros() < start_time + WORKLOAD_DURATION) {
@@ -1356,11 +1361,17 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   bool allow_delay = !force;
   Status s;
 
-  if (!force && (mem_->ApproximateMemoryUsage() <= write_buffer_size)) {
-    if (throughput > 3.0 and write_buffer_size < 16*1024*1024) {
-      write_buffer_size += 4*1024*1024;
-    }
-  }
+  // if (!force && (mem_->ApproximateMemoryUsage() >= write_buffer_size)) {
+  //   //printf("memory usage %lu\n", mem_->ApproximateMemoryUsage());
+  //   //printf("write buffer size %lu\n", write_buffer_size);
+  //   if (throughput > 3.0 && write_buffer_size < 32*1024*1024) {
+  //     write_buffer_size += 2*1024*1024;
+  //   }
+  // }
+
+  // if (mem_->ApproximateMemoryUsage() < 4*1024*1024) {
+  //   write_buffer_size = 4*1024*1024;
+  // }
 
   while (true) {
     if (!bg_error_.ok()) {
@@ -1482,7 +1493,9 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     *value = std::to_string(may_be_schedule_compaction_count);
   } else if (in == "compaction-scheduled-count") {
     *value = std::to_string(compaction_scheduled_count);
-  } 
+  } else if (in == "write-buffer-size") {
+    *value = std::to_string(write_buffer_size);
+  }
   else if (in == "level-wise-data") {
     char buf[200];
     for (int level = 0; level < config::kNumLevels; level++) {
