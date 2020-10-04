@@ -1,4 +1,6 @@
 import csv
+import math
+import numpy as np
 import matplotlib.pyplot as plt
 
 def parse(input, y, only_level0):
@@ -59,6 +61,90 @@ def plotter(file_name, x, y, output_file, x_label, y_label, only_level0 = False)
     plt.savefig(output_file)
     plt.clf()
 
+def get_time_diff(start, end):
+    import datetime
+    start_obj = datetime.datetime.strptime(start, '%Y/%m/%d-%H:%M:%S.%f')   
+    end_obj = datetime.datetime.strptime(end, '%Y/%m/%d-%H:%M:%S.%f')
+    diff = end_obj - start_obj 
+    tuple = divmod(diff.total_seconds(), 60)
+    return float(tuple[0])*60 + float(tuple[1])
+
+def format_compaction_stats(file_name, output_file):
+    header = ["compaction_no", "level", "start_time", "end_time", "version_summary_before", "compacting", "compacted", \
+        "version_summary_after", "data_read", "data_written"]
+    workload_start = 0
+    compaction_no = 1
+    row = ["None" for _ in range(len(header))]
+    row[0] = str(compaction_no)
+    with open(output_file, 'w') as out_file:
+        out_file.write(",".join(header) + "\n")
+        with open(file_name) as f:
+            lines = f.readlines()
+            workload_start = lines[0].split()[0]
+            for line in lines:
+                cols = line.split(" ")
+                if "Compacting" in line:
+                    start_time = cols[0]
+                    level = int(cols[3][-1])
+                    row[header.index("start_time")] = str(get_time_diff(workload_start, start_time))
+                    row[header.index("level")] = str(level)
+                    row[header.index("compacting")] = str(cols[3] + "+" + cols[5])
+                elif "Version summary" in line:
+                    row[header.index("version_summary_before")] = line.split(": ")[-1].rstrip("\n")
+                elif "Compaction stats" in line:
+                    row[header.index("data_read")] = str(float(cols[4]) / (1024*1024))
+                    row[header.index("data_written")] = str(float(cols[6]) / (1024*1024))
+                elif "Compacted" in line:
+                    row[header.index("compacted")] = str(cols[3] + "+" + cols[5])
+                elif "compacted to" in line:
+                    end_time = cols[0]
+                    row[header.index("end_time")] = str(get_time_diff(workload_start, end_time))
+                    row[header.index("version_summary_after")] = line.split(": ")[-1].rstrip("\n")
+                    out_file.write(",".join(row) + "\n")
+                    compaction_no += 1
+                    row = ["None" for _ in range(len(header))]
+                    row[0] = str(compaction_no)
+
+def plot_compaction_data(input_file, total_time):
+    with open(input_file) as f:
+        lines = f.readlines()
+        header = lines[0].rstrip("\n").split(",")
+        for line in lines[1:]:
+            line = line.split(",")
+            level = int(line[header.index("level")])
+            start_time = float(line[header.index("start_time")])
+            end_time = float(line[header.index("end_time")])
+            plt.axhline(y = level, xmin = start_time / total_time, xmax = end_time / total_time, color = "r")
+        plt.xticks(np.arange(0.0, total_time, 1))
+        plt.yticks(np.arange(-1, 8, 1))
+        plt.xlabel("time")
+        plt.ylabel("level")
+        plt.savefig("/users/nithinv/compaction_graphs/level_wise_compaction.png")
+        plt.clf()
+
+        print(header)
+        total_data_read = 0 
+        total_data_written = 0
+        x = []
+        y_read = []
+        y_written = []
+        for line in lines[1:]:
+            line = line.split(",")
+            x.append(float(line[header.index("end_time")]))
+            total_data_read += float(line[header.index("data_read")])
+            total_data_written += float(line[header.index("data_written")])
+            y_read.append(total_data_read)
+            y_written.append(total_data_written)
+        plt.bar(x, y_read, color='b', label='Data read')
+        plt.bar(x, y_written, color='r', label='Data written')
+        plt.legend()
+        plt.xlabel("time")
+        plt.ylabel("Total data read and written (MB)")
+        plt.savefig("/users/nithinv/compaction_graphs/compaction_data_read.png")
+        plt.clf()
+
+
+
 if __name__ == "__main__":
     extra = ""
     plotter("./build/background_stats.csv", "time", "memoryUsage", "/users/nithinv/graphs/memory" + extra + ".png", "time", "Memory usage (MB)")
@@ -70,3 +156,6 @@ if __name__ == "__main__":
     plotter("./build/background_stats.csv", "time", "writeBufferSize", "/users/nithinv/graphs/write_buffer_size" + extra + ".png", "time", "Write buffer size (MB)")
     plotter("./build/foreground_stats.csv", "time", "writes", "/users/nithinv/graphs/writes" + extra + ".png", "time", "Number of writes in the interval")
     plotter("./build/foreground_stats.csv", "time", "throughput", "/users/nithinv/graphs/throughput" + extra + ".png", "time", "Throughput in the interval (MB/s)")
+    # time_wise_plot()
+    #format_compaction_stats('/tmp/leveldbtest-20001/dbbench/LOG', '/users/nithinv/test.csv')
+    #plot_compaction_data("/users/nithinv/test.csv", 13)

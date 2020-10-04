@@ -714,6 +714,7 @@ void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
 
   if (imm_ != nullptr) {
+    //printf("Compactmemtable called in backgroundcompaction\n");
     CompactMemTable();
     return;
   }
@@ -888,6 +889,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
 Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   mutex_.AssertHeld();
+  //printf("Compacted\n");
   Log(options_.info_log, "Compacted %d@%d + %d@%d files => %lld bytes",
       compact->compaction->num_input_files(0), compact->compaction->level(),
       compact->compaction->num_input_files(1), compact->compaction->level() + 1,
@@ -919,10 +921,13 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
+  // printf("Starting compaction\n");
   Log(options_.info_log, "Compacting %d@%d + %d@%d files",
       compact->compaction->num_input_files(0), compact->compaction->level(),
       compact->compaction->num_input_files(1),
       compact->compaction->level() + 1);
+  VersionSet::LevelSummaryStorage tmp1;
+  Log(options_.info_log, "Version summary: %s", versions_->LevelSummary(&tmp1));
 
   assert(versions_->NumLevelFiles(compact->compaction->level()) > 0);
   assert(compact->builder == nullptr);
@@ -950,6 +955,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       const uint64_t imm_start = env_->NowMicros();
       mutex_.Lock();
       if (imm_ != nullptr) {
+        //printf("Compactmemtable called in docompactionwork\n");
         CompactMemTable();
         // Wake up MakeRoomForWrite() if necessary.
         background_work_finished_signal_.SignalAll();
@@ -1061,6 +1067,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   for (size_t i = 0; i < compact->outputs.size(); i++) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
+
+  Log(options_.info_log, "Compaction stats %ld read %ld written",
+      stats.bytes_read, stats.bytes_written);
 
   mutex_.Lock();
   stats_[compact->compaction->level() + 1].Add(stats);
