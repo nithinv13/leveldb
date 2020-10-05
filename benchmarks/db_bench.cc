@@ -794,7 +794,7 @@ class Benchmark {
   void WriteInBurstsTime(ThreadState* thread, bool seq) {
       std::ofstream stats_file;
       stats_file.open("foreground_stats.csv");
-      stats_file << "time," << "writes," << "throughput," << std::endl;
+      stats_file << "time," << "writes," << "throughput," << "data_written," << std::endl;
       double prev_bytes = 0;
       double prev_time = g_env->NowMicros();
       double prev_writes = 0;
@@ -827,11 +827,11 @@ class Benchmark {
             }
             total_writes += 1;
             double log_time = g_env->NowMicros();
-            if (log_time > prev_time + 250000.0) {
+            if (log_time > prev_time + 1000000.0) {
                 double throughput = (bytes - prev_bytes) / (log_time - prev_time);
                 double writes = total_writes - prev_writes;
                 stats_file << std::to_string(log_time) << "," << std::to_string(writes) << "," << std::to_string(throughput) << "," \
-                << std::endl;
+                << std::to_string(bytes / (1024*1024)) << std::endl;
                 prev_writes = total_writes;
                 prev_bytes = bytes;
                 prev_time = log_time;
@@ -842,7 +842,7 @@ class Benchmark {
         }
       thread->stats.AddBytes(bytes);
       th.join();
-      printf("Total data written = %.1f MB \n", bytes / pow(10, 6));
+      printf("Total data written = %.1f MB \n", bytes / pow(1024, 2));
   }
 
   // Function to simulate periodic / bursts of writes based on number of writes

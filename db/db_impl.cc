@@ -45,7 +45,7 @@ double total_data = 0;
 double prev_data = 0;
 double throughput = 0;
 size_t write_buffer_size = 4*1024*1024;
-double WORKLOAD_DURATION = 60000000;
+double WORKLOAD_DURATION = 120000000;
 
 const int kNumNonTableCacheFiles = 10;
 

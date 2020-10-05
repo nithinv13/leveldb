@@ -24,7 +24,7 @@ def parse(input, y, only_level0):
         total += float(rows[i][col])
     return total
 
-def plotter(file_name, x, y, output_file, x_label, y_label, only_level0 = False):
+def plotter(file_name, x, y, output_file, x_label, y_label, only_level0 = False, total=False):
     start_time = 0
     if "background" in file_name:
         start_time_file = "build/foreground_stats.csv"
@@ -43,6 +43,7 @@ def plotter(file_name, x, y, output_file, x_label, y_label, only_level0 = False)
         start_time = min(start_time, float(csv_reader[1][0]))
         x_list = []
         y_list = []
+        total_val = 0
         for row in csv_reader[1:]:
             time = (float(row[header.index(x)]) - start_time) / 10**6
             if y.startswith("levelWiseData"):
@@ -52,6 +53,10 @@ def plotter(file_name, x, y, output_file, x_label, y_label, only_level0 = False)
                 prev_val = temp
             else:
                 y_val = float(row[header.index(y)])
+                # if total: 
+                #     total_val += y_val 
+                # else:
+                #     total_val = y_val
             x_list.append(time)
             y_list.append(y_val)
     
@@ -115,7 +120,7 @@ def plot_compaction_data(input_file, total_time):
             start_time = float(line[header.index("start_time")])
             end_time = float(line[header.index("end_time")])
             plt.axhline(y = level, xmin = start_time / total_time, xmax = end_time / total_time, color = "r")
-        plt.xticks(np.arange(0.0, total_time, 1))
+        plt.xticks(np.arange(0.0, total_time, 5))
         plt.yticks(np.arange(-1, 8, 1))
         plt.xlabel("time")
         plt.ylabel("level")
@@ -156,6 +161,7 @@ if __name__ == "__main__":
     plotter("./build/background_stats.csv", "time", "writeBufferSize", "/users/nithinv/graphs/write_buffer_size" + extra + ".png", "time", "Write buffer size (MB)")
     plotter("./build/foreground_stats.csv", "time", "writes", "/users/nithinv/graphs/writes" + extra + ".png", "time", "Number of writes in the interval")
     plotter("./build/foreground_stats.csv", "time", "throughput", "/users/nithinv/graphs/throughput" + extra + ".png", "time", "Throughput in the interval (MB/s)")
-    # time_wise_plot()
-    #format_compaction_stats('/tmp/leveldbtest-20001/dbbench/LOG', '/users/nithinv/test.csv')
-    #plot_compaction_data("/users/nithinv/test.csv", 13)
+    #plotter("./build/foreground_stats.csv", "time", "writes", "/users/nithinv/graphs/writes1" + extra + ".png", "time", "Total write data (MB)", True)
+    plotter("./build/foreground_stats.csv", "time", "data_written", "/users/nithinv/graphs/data_written" + extra + ".png", "time", "Total data written (MB)")
+    format_compaction_stats('/tmp/leveldbtest-20001/dbbench/LOG', '/users/nithinv/test.csv')
+    plot_compaction_data("/users/nithinv/test.csv", 120)
