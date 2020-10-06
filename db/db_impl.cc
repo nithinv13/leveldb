@@ -45,7 +45,7 @@ double total_data = 0;
 double prev_data = 0;
 double throughput = 0;
 size_t write_buffer_size = 4*1024*1024;
-double WORKLOAD_DURATION = 60000000;
+double WORKLOAD_DURATION = 90000000;
 
 const int kNumNonTableCacheFiles = 10;
 
@@ -720,6 +720,10 @@ void DBImpl::BackgroundCompaction() {
     return;
   }
 
+  // if (throughput > 3.0) {
+  //   return;
+  // }
+
   Compaction* c;
   bool is_manual = (manual_compaction_ != nullptr);
   InternalKey manual_end;
@@ -912,13 +916,19 @@ void DBImpl::UpdateThroughputScheduler(void* db) {
 }
 
 void DBImpl::UpdateThroughput() {
+  //printf("Inside updatethroughput\n");
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
   int interval = 1000;
   double start_time = env_->NowMicros();
   while (env_->NowMicros() < start_time + WORKLOAD_DURATION) {
     throughput = (total_data - prev_data)*1000 / (interval*1048576);
     prev_data = total_data;
-    DBImpl::MaybeScheduleCompaction();
+    //printf("Throughut %f\n", throughput);
+    if (throughput < 3.0) {
+      //printf("Calling maybeschedulecompaction from update throughput\n");
+      //fflush(stdout);
+      DBImpl::MaybeScheduleCompaction();
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(interval));
   }
 }
