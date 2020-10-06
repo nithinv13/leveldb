@@ -825,7 +825,7 @@ class Benchmark {
               std::fprintf(stderr, "put error: %s\n", s.ToString().c_str());
               std::exit(1);
             }
-            total_writes += 1;
+            total_writes += entries_per_batch_;
             double log_time = g_env->NowMicros();
             if (log_time > prev_time + 1000000.0) {
                 double throughput = (bytes - prev_bytes) / (log_time - prev_time);
@@ -847,6 +847,15 @@ class Benchmark {
 
   // Function to simulate periodic / bursts of writes based on number of writes
   void WriteInBurstsCount(ThreadState* thread, bool seq) {
+      std::ofstream stats_file;
+      stats_file.open("foreground_stats.csv");
+      stats_file << "time," << "writes," << "throughput," << "data_written," << std::endl;
+      double prev_bytes = 0;
+      double prev_time = g_env->NowMicros();
+      double prev_writes = 0;
+      double total_writes = 0;
+      std::thread th(CollectStats, &db_);
+      sleep(1);
       int i = 0;
       RandomGenerator gen;
       WriteBatch batch;
@@ -870,11 +879,23 @@ class Benchmark {
             std::exit(1);
           }
           current_writes += entries_per_batch_;
+          total_writes += entries_per_batch_;
+          double log_time = g_env->NowMicros();
+          if (log_time > prev_time + 1000000.0) {
+              double throughput = (bytes - prev_bytes) / (log_time - prev_time);
+              double writes = total_writes - prev_writes;
+              stats_file << std::to_string(log_time) << "," << std::to_string(writes) << "," << std::to_string(throughput) << "," \
+              << std::to_string(bytes / (1024*1024)) << std::endl;
+              prev_writes = total_writes;
+              prev_bytes = bytes;
+              prev_time = log_time;
+          }
         }
         sleep(FLAGS_sleep_duration);
         i += FLAGS_write_count_before_sleep;
       }
       thread->stats.AddBytes(bytes);
+      th.join();
       printf("Total data written = %.1f MB \n", bytes / pow(10, 6));
   }
 

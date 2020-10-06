@@ -158,8 +158,9 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       manual_compaction_(nullptr),
       versions_(new VersionSet(dbname_, &options_, table_cache_,
                                &internal_comparator_)) {
-                                 std::thread th(&DBImpl::UpdateThroughput, this);
-                                 th.detach();
+                                 //std::thread th(&DBImpl::UpdateThroughput, this);
+                                 //th.detach();
+                                 env_->Schedule(&DBImpl::UpdateThroughputScheduler, this);
                                }
 
 DBImpl::~DBImpl() {
@@ -906,6 +907,10 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
 
+void DBImpl::UpdateThroughputScheduler(void* db) {
+  reinterpret_cast<DBImpl*>(db)->UpdateThroughput();
+}
+
 void DBImpl::UpdateThroughput() {
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
   int interval = 1000;
@@ -1068,8 +1073,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
 
-  Log(options_.info_log, "Compaction stats %ld read %ld written",
-      stats.bytes_read, stats.bytes_written);
+  Log(options_.info_log, "Compaction stats %ld read %ld written %ld time",
+      stats.bytes_read, stats.bytes_written, stats.micros);
 
   mutex_.Lock();
   stats_[compact->compaction->level() + 1].Add(stats);

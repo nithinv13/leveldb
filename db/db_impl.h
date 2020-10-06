@@ -50,6 +50,7 @@ class DBImpl : public DB {
   void CompactRange(const Slice* begin, const Slice* end) override;
 
   // Extra methods (for testing) that are not in the public DB interface
+  static void UpdateThroughputScheduler(void* db);
 
   void UpdateThroughput();
 

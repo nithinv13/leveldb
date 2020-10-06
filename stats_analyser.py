@@ -126,26 +126,38 @@ def plot_compaction_data(input_file, total_time):
         plt.ylabel("level")
         plt.savefig("/users/nithinv/compaction_graphs/level_wise_compaction.png")
         plt.clf()
-
+        colors = ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7']
         print(header)
         total_data_read = 0 
         total_data_written = 0
-        x = []
-        y_read = []
-        y_written = []
+        x, color_list = [], []
+        y_read, y_written = [], []
+        y_read_total, y_written_total = [], []
         for line in lines[1:]:
             line = line.split(",")
             x.append(float(line[header.index("end_time")]))
-            total_data_read += float(line[header.index("data_read")])
-            total_data_written += float(line[header.index("data_written")])
-            y_read.append(total_data_read)
-            y_written.append(total_data_written)
-        plt.bar(x, y_read, color='b', label='Data read')
-        plt.bar(x, y_written, color='r', label='Data written')
+            level = int(line[header.index("level")])
+            data_read, data_written = float(line[header.index("data_read")]), float(line[header.index("data_written")])
+            total_data_read += data_read
+            total_data_written += data_written
+            y_read.append(data_read)
+            y_written.append(data_written)
+            y_read_total.append(total_data_read)
+            y_written_total.append(total_data_written)
+            color_list.append(colors[level-1])
+        plt.bar(x, y_read_total, color=color_list, label="Total data read")
+        plt.bar(x, y_written_total, color="b", label="Total data written")
         plt.legend()
         plt.xlabel("time")
         plt.ylabel("Total data read and written (MB)")
-        plt.savefig("/users/nithinv/compaction_graphs/compaction_data_read.png")
+        plt.savefig("/users/nithinv/compaction_graphs/compaction_data_rw_total.png")
+        plt.clf()
+        plt.bar(x, y_read, color=color_list, label='Data read')
+        plt.bar(x, y_written, color="b", label='Data written')
+        plt.legend()
+        plt.xlabel("time")
+        plt.ylabel("Data read and written (MB)")
+        plt.savefig("/users/nithinv/compaction_graphs/compaction_data_rw.png")
         plt.clf()
 
 
@@ -158,14 +170,18 @@ def plot_cdf(file_name, column):
             data_point = float(line[3])-float(line[2])
             data.append(data_point)
     
-    num_bins = 20
+    num_bins = 40
     counts, bin_edges = np.histogram (data, bins=num_bins, normed=True)
     cdf = np.cumsum(counts)
-    plt.plot(bin_edges[1:], counts)
     plt.plot(bin_edges[1:], cdf/cdf[-1])
     plt.xlabel("compaction time")
     plt.ylabel("Probability")
     plt.savefig("/users/nithinv/compaction_graphs/compaction_time_cdf.png")
+    plt.clf()
+    plt.hist(data, bins=40)
+    plt.xlabel("Time for compaction")
+    plt.ylabel("Count of compactions")
+    plt.savefig("/users/nithinv/compaction_graphs/compaction_time_pdf.png")
     plt.clf()
 
 
@@ -183,5 +199,5 @@ if __name__ == "__main__":
     # #plotter("./build/foreground_stats.csv", "time", "writes", "/users/nithinv/graphs/writes1" + extra + ".png", "time", "Total write data (MB)", True)
     # plotter("./build/foreground_stats.csv", "time", "data_written", "/users/nithinv/graphs/data_written" + extra + ".png", "time", "Total data written (MB)")
     # format_compaction_stats('/tmp/leveldbtest-20001/dbbench/LOG', '/users/nithinv/test.csv')
-    #plot_compaction_data("/users/nithinv/test.csv", 120)
+    plot_compaction_data("/users/nithinv/test.csv", 120)
     plot_cdf("", "")
