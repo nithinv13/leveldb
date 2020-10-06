@@ -45,7 +45,7 @@ double total_data = 0;
 double prev_data = 0;
 double throughput = 0;
 size_t write_buffer_size = 4*1024*1024;
-double WORKLOAD_DURATION = 120000000;
+double WORKLOAD_DURATION = 60000000;
 
 const int kNumNonTableCacheFiles = 10;
 
@@ -158,9 +158,9 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       manual_compaction_(nullptr),
       versions_(new VersionSet(dbname_, &options_, table_cache_,
                                &internal_comparator_)) {
-                                 //std::thread th(&DBImpl::UpdateThroughput, this);
-                                 //th.detach();
-                                 env_->Schedule(&DBImpl::UpdateThroughputScheduler, this);
+                                 std::thread th(&DBImpl::UpdateThroughput, this);
+                                 th.detach();
+                                 //env_->Schedule(&DBImpl::UpdateThroughputScheduler, this);
                                }
 
 DBImpl::~DBImpl() {
@@ -918,6 +918,7 @@ void DBImpl::UpdateThroughput() {
   while (env_->NowMicros() < start_time + WORKLOAD_DURATION) {
     throughput = (total_data - prev_data)*1000 / (interval*1048576);
     prev_data = total_data;
+    DBImpl::MaybeScheduleCompaction();
     std::this_thread::sleep_for(std::chrono::milliseconds(interval));
   }
 }
