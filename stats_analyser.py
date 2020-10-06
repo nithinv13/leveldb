@@ -149,19 +149,39 @@ def plot_compaction_data(input_file, total_time):
         plt.clf()
 
 
+def plot_cdf(file_name, column):
+    data = []
+    with open("/users/nithinv/test.csv") as f:
+        lines = f.readlines()
+        for line in lines[1:]:
+            line = line.split(",")
+            data_point = float(line[3])-float(line[2])
+            data.append(data_point)
+    
+    num_bins = 20
+    counts, bin_edges = np.histogram (data, bins=num_bins, normed=True)
+    cdf = np.cumsum(counts)
+    plt.plot(bin_edges[1:], counts)
+    plt.plot(bin_edges[1:], cdf/cdf[-1])
+    plt.xlabel("compaction time")
+    plt.ylabel("Probability")
+    plt.savefig("/users/nithinv/compaction_graphs/compaction_time_cdf.png")
+    plt.clf()
+
 
 if __name__ == "__main__":
-    extra = ""
-    plotter("./build/background_stats.csv", "time", "memoryUsage", "/users/nithinv/graphs/memory" + extra + ".png", "time", "Memory usage (MB)")
-    plotter("./build/background_stats.csv", "time", "compactionScheduledCount", "/users/nithinv/graphs/compaction" + extra + ".png", "time", "Number of compactions scheduled")
-    plotter("./build/background_stats.csv", "time", "levelWiseData::writes", "/users/nithinv/graphs/compaction_writes" + extra + ".png", "time", "Compaction writes (MB)")
-    plotter("./build/background_stats.csv", "time", "levelWiseData::reads", "/users/nithinv/graphs/compaction_reads" + extra + ".png", "time", "Compaction reads (MB)")
-    plotter("./build/background_stats.csv", "time", "levelWiseData::files", "/users/nithinv/graphs/files_created" + extra + ".png", "time", "Number of files created in the interval")
-    plotter("./build/background_stats.csv", "time", "levelWiseData::time", "/users/nithinv/graphs/compaction_time" + extra + ".png", "time", "Compaction time (s)")
-    plotter("./build/background_stats.csv", "time", "writeBufferSize", "/users/nithinv/graphs/write_buffer_size" + extra + ".png", "time", "Write buffer size (MB)")
-    plotter("./build/foreground_stats.csv", "time", "writes", "/users/nithinv/graphs/writes" + extra + ".png", "time", "Number of writes in the interval")
-    plotter("./build/foreground_stats.csv", "time", "throughput", "/users/nithinv/graphs/throughput" + extra + ".png", "time", "Throughput in the interval (MB/s)")
-    #plotter("./build/foreground_stats.csv", "time", "writes", "/users/nithinv/graphs/writes1" + extra + ".png", "time", "Total write data (MB)", True)
-    plotter("./build/foreground_stats.csv", "time", "data_written", "/users/nithinv/graphs/data_written" + extra + ".png", "time", "Total data written (MB)")
-    format_compaction_stats('/tmp/leveldbtest-20001/dbbench/LOG', '/users/nithinv/test.csv')
-    plot_compaction_data("/users/nithinv/test.csv", 120)
+    # extra = ""
+    # plotter("./build/background_stats.csv", "time", "memoryUsage", "/users/nithinv/graphs/memory" + extra + ".png", "time", "Memory usage (MB)")
+    # plotter("./build/background_stats.csv", "time", "compactionScheduledCount", "/users/nithinv/graphs/compaction" + extra + ".png", "time", "Number of compactions scheduled")
+    # plotter("./build/background_stats.csv", "time", "levelWiseData::writes", "/users/nithinv/graphs/compaction_writes" + extra + ".png", "time", "Compaction writes (MB)")
+    # plotter("./build/background_stats.csv", "time", "levelWiseData::reads", "/users/nithinv/graphs/compaction_reads" + extra + ".png", "time", "Compaction reads (MB)")
+    # plotter("./build/background_stats.csv", "time", "levelWiseData::files", "/users/nithinv/graphs/files_created" + extra + ".png", "time", "Number of files created in the interval")
+    # plotter("./build/background_stats.csv", "time", "levelWiseData::time", "/users/nithinv/graphs/compaction_time" + extra + ".png", "time", "Compaction time (s)")
+    # plotter("./build/background_stats.csv", "time", "writeBufferSize", "/users/nithinv/graphs/write_buffer_size" + extra + ".png", "time", "Write buffer size (MB)")
+    # plotter("./build/foreground_stats.csv", "time", "writes", "/users/nithinv/graphs/writes" + extra + ".png", "time", "Number of writes in the interval")
+    # plotter("./build/foreground_stats.csv", "time", "throughput", "/users/nithinv/graphs/throughput" + extra + ".png", "time", "Throughput in the interval (MB/s)")
+    # #plotter("./build/foreground_stats.csv", "time", "writes", "/users/nithinv/graphs/writes1" + extra + ".png", "time", "Total write data (MB)", True)
+    # plotter("./build/foreground_stats.csv", "time", "data_written", "/users/nithinv/graphs/data_written" + extra + ".png", "time", "Total data written (MB)")
+    # format_compaction_stats('/tmp/leveldbtest-20001/dbbench/LOG', '/users/nithinv/test.csv')
+    #plot_compaction_data("/users/nithinv/test.csv", 120)
+    plot_cdf("", "")
