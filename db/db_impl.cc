@@ -924,11 +924,11 @@ void DBImpl::UpdateThroughput() {
     throughput = (total_data - prev_data)*1000 / (interval*1048576);
     prev_data = total_data;
     //printf("Throughut %f\n", throughput);
-    if (throughput < 3.0) {
-      //printf("Calling maybeschedulecompaction from update throughput\n");
-      //fflush(stdout);
-      DBImpl::MaybeScheduleCompaction();
-    }
+    // if (throughput < 3.0) {
+    //   //printf("Calling maybeschedulecompaction from update throughput\n");
+    //   //fflush(stdout);
+    //   DBImpl::MaybeScheduleCompaction();
+    // }
     std::this_thread::sleep_for(std::chrono::milliseconds(interval));
   }
 }
@@ -1413,7 +1413,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // case it is sharing the same core as the writer.
       mutex_.Unlock();
       //printf("%s", "Going to sleep now");
-      env_->SleepForMicroseconds(1000);
+      env_->SleepForMicroseconds(100);
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
     } else if (!force &&

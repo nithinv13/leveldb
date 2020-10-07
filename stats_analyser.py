@@ -146,7 +146,7 @@ def plot_compaction_data(input_file, total_time):
             y_written.append(data_written)
             y_read_total.append(total_data_read)
             y_written_total.append(total_data_written)
-            color_list.append(colors[level])
+            color_list.append(colors[len(colors)-level-1])
             widths.append(float(line[header.index("end_time")])-float(line[header.index("start_time")]))
         print(x)
         plt.bar(x, y_read_total, color=color_list, label="Total data read", width=widths, align="edge")
