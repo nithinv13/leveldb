@@ -826,6 +826,9 @@ class Benchmark {
               std::exit(1);
             }
             total_writes += entries_per_batch_;
+            // if ((int)total_writes % 10000 == 0) {
+            //   sleep(1);
+            // } 
             double log_time = g_env->NowMicros();
             if (log_time > prev_time + 1000000.0) {
                 double throughput = (bytes - prev_bytes) / (log_time - prev_time);
@@ -836,7 +839,6 @@ class Benchmark {
                 prev_bytes = bytes;
                 prev_time = log_time;
             }
-
           }
           sleep(FLAGS_sleep_duration);
         }

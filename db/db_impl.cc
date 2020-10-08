@@ -45,7 +45,7 @@ double total_data = 0;
 double prev_data = 0;
 double throughput = 0;
 size_t write_buffer_size = 4*1024*1024;
-double WORKLOAD_DURATION = 90000000;
+double WORKLOAD_DURATION = 100000000;
 
 const int kNumNonTableCacheFiles = 10;
 
@@ -684,11 +684,15 @@ void DBImpl::MaybeScheduleCompaction() {
   } else {
     compaction_scheduled_count += 1;
     background_compaction_scheduled_ = true;
+    // printf("Scheduling compaction thread\n");
+    // fflush(stdout);
     env_->Schedule(&DBImpl::BGWork, this);
   }
 }
 
 void DBImpl::BGWork(void* db) {
+  // printf("Running the scheduled thread");
+  // fflush(stdout);
   reinterpret_cast<DBImpl*>(db)->BackgroundCall();
 }
 
@@ -1284,7 +1288,11 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     // into mem_.
     {
       mutex_.Unlock();
-      // env_->SleepForMicroseconds(100);
+      // if (static_cast<int>(total_data) % 20*1024*1024 == 0) {
+      //   //printf("Sleeping here\n");
+      //   fflush(stdout);
+      //   env_->SleepForMicroseconds(100);
+      // }
       status = log_->AddRecord(WriteBatchInternal::Contents(write_batch));
       bool sync_error = false;
       if (status.ok() && options.sync) {
@@ -1414,7 +1422,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // case it is sharing the same core as the writer.
       mutex_.Unlock();
       //printf("%s", "Going to sleep now");
-      env_->SleepForMicroseconds(100);
+      env_->SleepForMicroseconds(1000);
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
     } else if (!force &&
