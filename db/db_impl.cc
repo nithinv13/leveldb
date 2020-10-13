@@ -44,8 +44,8 @@ int compaction_scheduled_count = 0;
 double total_data = 0;
 double prev_data = 0;
 double throughput = 0;
-size_t write_buffer_size = 32*1024*1024;
-double WORKLOAD_DURATION = 50000000;
+size_t write_buffer_size = 4*1024*1024;
+double WORKLOAD_DURATION = 15000000;
 
 const int kNumNonTableCacheFiles = 10;
 
@@ -146,6 +146,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       db_lock_(nullptr),
       shutting_down_(false),
       background_work_finished_signal_(&mutex_),
+      compact_memtable_finished_(&mutex_),
       mem_(nullptr),
       imm_(nullptr),
       has_imm_(false),
@@ -155,6 +156,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       seed_(0),
       tmp_batch_(new WriteBatch),
       background_compaction_scheduled_(false),
+      compact_mem_table_scheduled_(false),
       manual_compaction_(nullptr),
       versions_(new VersionSet(dbname_, &options_, table_cache_,
                                &internal_comparator_)) {
@@ -517,6 +519,8 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   const uint64_t start_micros = env_->NowMicros();
   FileMetaData meta;
   meta.number = versions_->NewFileNumber();
+  // printf("New file number got: %lu\n", meta.number);
+  // fflush(stdout);
   pending_outputs_.insert(meta.number);
   Iterator* iter = mem->NewIterator();
   Log(options_.info_log, "Level-0 table #%llu: started",
@@ -582,7 +586,7 @@ void DBImpl::CompactMemTable() {
     imm_->Unref();
     imm_ = nullptr;
     has_imm_.store(false, std::memory_order_release);
-    // RemoveObsoleteFiles();
+    RemoveObsoleteFiles();
   } else {
     RecordBackgroundError(s);
   }
@@ -697,6 +701,11 @@ void DBImpl::CMWork(void* db) {
 }
 
 void DBImpl::CompactMemTableCall() {
+  if (background_compaction_scheduled_) {
+    // background_work_finished_signal_.Wait();
+    return;
+  }
+  compact_mem_table_scheduled_ = true;
 	int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
   	if (has_imm_.load(std::memory_order_relaxed)) {
       const uint64_t imm_start = env_->NowMicros();
@@ -714,6 +723,8 @@ void DBImpl::CompactMemTableCall() {
       mutex_.Unlock();
       imm_micros += (env_->NowMicros() - imm_start);
     }
+  compact_mem_table_scheduled_ = false;
+  compact_memtable_finished_.SignalAll();
 }
 
 
@@ -724,6 +735,10 @@ void DBImpl::BGWork(void* db) {
 }
 
 void DBImpl::BackgroundCall() {
+  if (compact_mem_table_scheduled_) {
+    compact_memtable_finished_.Wait();
+  }
+  background_compaction_scheduled_ = true;
   MutexLock l(&mutex_);
   // printf("background_compaction_scheduled_:%d\n", background_compaction_scheduled_);
   assert(background_compaction_scheduled_);
@@ -736,11 +751,12 @@ void DBImpl::BackgroundCall() {
     BackgroundCompaction();
   }
 
-  background_compaction_scheduled_ = false;
+  // background_compaction_scheduled_ = false;
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
   // MaybeScheduleCompaction();
+  background_compaction_scheduled_ = false;
   background_work_finished_signal_.SignalAll();
 }
 
