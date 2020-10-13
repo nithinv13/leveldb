@@ -135,6 +135,8 @@ class DBImpl : public DB {
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  Status CompactMemTableForWrite(bool force /* compact even if there is room? */)
+      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   WriteBatch* BuildBatchGroup(Writer** last_writer)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
@@ -142,7 +144,9 @@ class DBImpl : public DB {
 
   void MaybeScheduleCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   static void BGWork(void* db);
+  static void CMWork(void* db);
   void BackgroundCall();
+  void CompactMemTableCall();
   void BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupCompaction(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
