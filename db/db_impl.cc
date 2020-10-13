@@ -45,7 +45,7 @@ double total_data = 0;
 double prev_data = 0;
 double throughput = 0;
 size_t write_buffer_size = 4*1024*1024;
-double WORKLOAD_DURATION = 100000000;
+double WORKLOAD_DURATION = 60000000;
 
 const int kNumNonTableCacheFiles = 10;
 
@@ -696,6 +696,28 @@ void DBImpl::BGWork(void* db) {
   reinterpret_cast<DBImpl*>(db)->BackgroundCall();
 }
 
+void DBImpl::CMWork(void* db) {
+  // printf("Running the scheduled thread");
+  // fflush(stdout);
+  reinterpret_cast<DBImpl*>(db)->CompactMemTableCall();
+}
+
+void DBImpl::CompactMemTableCall() {
+	int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
+  	if (has_imm_.load(std::memory_order_relaxed)) {
+      const uint64_t imm_start = env_->NowMicros();
+      mutex_.Lock();
+      if (imm_ != nullptr) {
+        CompactMemTable();
+        // printf("Memtable compaction. Files now %d\n", versions_->NumLevelFiles(0));
+        // Wake up MakeRoomForWrite() if necessary.
+        background_work_finished_signal_.SignalAll();
+      }
+      mutex_.Unlock();
+      imm_micros += (env_->NowMicros() - imm_start);
+    }
+}
+
 void DBImpl::BackgroundCall() {
   MutexLock l(&mutex_);
   assert(background_compaction_scheduled_);
@@ -718,13 +740,9 @@ void DBImpl::BackgroundCall() {
 void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
 
-  if (imm_ != nullptr) {
-    //printf("Compactmemtable called in backgroundcompaction\n");
-    CompactMemTable();
-    return;
-  }
-
-  // if (throughput > 3.0) {
+  // if (imm_ != nullptr) {
+  //   //printf("Compactmemtable called in backgroundcompaction\n");
+  //   CompactMemTable();
   //   return;
   // }
 
@@ -800,9 +818,9 @@ void DBImpl::BackgroundCompaction() {
     manual_compaction_ = nullptr;
   }
 
-  if (mem_->ApproximateMemoryUsage() < write_buffer_size) {
-    write_buffer_size = 4*1024*1024;
-  }
+  // if (mem_->ApproximateMemoryUsage() < write_buffer_size) {
+  //   write_buffer_size = 4*1024*1024;
+  // }
 }
 
 void DBImpl::CleanupCompaction(CompactionState* compact) {
@@ -922,25 +940,25 @@ void DBImpl::UpdateThroughputScheduler(void* db) {
 void DBImpl::UpdateThroughput() {
   //printf("Inside updatethroughput\n");
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-  int interval = 1000;
+  int interval = 20*1000; // 1 second
   double start_time = env_->NowMicros();
   while (env_->NowMicros() < start_time + WORKLOAD_DURATION) {
-    throughput = (total_data - prev_data)*1000 / (interval*1048576);
-    prev_data = total_data;
-    //printf("Throughut %f\n", throughput);
+    // throughput = (total_data - prev_data)*1000 / (interval*1048576);
+    // prev_data = total_data;
     // if (throughput < 3.0) {
-    //   //printf("Calling maybeschedulecompaction from update throughput\n");
-    //   //fflush(stdout);
     //   DBImpl::MaybeScheduleCompaction();
     // }
     std::this_thread::sleep_for(std::chrono::milliseconds(interval));
+    BackgroundCompaction();
+    // printf("BG Done\n");
   }
+  printf("Done\n");
 }
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
-
+  int ctr = 0;
   // printf("Starting compaction\n");
   Log(options_.info_log, "Compacting %d@%d + %d@%d files",
       compact->compaction->num_input_files(0), compact->compaction->level(),
@@ -969,20 +987,23 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   std::string current_user_key;
   bool has_current_user_key = false;
   SequenceNumber last_sequence_for_key = kMaxSequenceNumber;
+  // printf("=======================================\n");
   while (input->Valid() && !shutting_down_.load(std::memory_order_acquire)) {
     // Prioritize immutable compaction work
-    if (has_imm_.load(std::memory_order_relaxed)) {
-      const uint64_t imm_start = env_->NowMicros();
-      mutex_.Lock();
-      if (imm_ != nullptr) {
-        //printf("Compactmemtable called in docompactionwork\n");
-        CompactMemTable();
-        // Wake up MakeRoomForWrite() if necessary.
-        background_work_finished_signal_.SignalAll();
-      }
-      mutex_.Unlock();
-      imm_micros += (env_->NowMicros() - imm_start);
-    }
+    
+    // if (has_imm_.load(std::memory_order_relaxed)) {
+    //   const uint64_t imm_start = env_->NowMicros();
+    //   mutex_.Lock();
+    //   if (imm_ != nullptr) {
+    //     //printf("Compactmemtable called in docompactionwork\n");
+    //     CompactMemTable();
+    //     // printf("Memtable compaction for %d. Files now %d\n", ctr, versions_->NumLevelFiles(0));
+    //     // Wake up MakeRoomForWrite() if necessary.
+    //     background_work_finished_signal_.SignalAll();
+    //   }
+    //   mutex_.Unlock();
+    //   imm_micros += (env_->NowMicros() - imm_start);
+    // }
 
     Slice key = input->key();
     if (compact->compaction->ShouldStopBefore(key) &&
@@ -1063,6 +1084,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     }
 
     input->Next();
+    ctr += 1;
   }
 
   if (status.ok() && shutting_down_.load(std::memory_order_acquire)) {
@@ -1274,7 +1296,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   }
 
   // May temporarily unlock and wait.
-  Status status = MakeRoomForWrite(updates == nullptr);
+  // Status status = MakeRoomForWrite(updates == nullptr);
+  // Status status;
+  Status status = CompactMemTableForWrite(updates == nullptr);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   if (status.ok() && updates != nullptr) {  // nullptr batch is for compactions
@@ -1388,6 +1412,56 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 
 // REQUIRES: mutex_ is held
 // REQUIRES: this thread is currently at the front of the writer queue
+Status DBImpl::CompactMemTableForWrite(bool force) {
+  mutex_.AssertHeld();
+  assert(!writers_.empty());
+  bool allow_delay = !force;
+  Status s;
+
+  while (true) {
+    if (!bg_error_.ok()) {
+      // Yield previous error
+      s = bg_error_;
+      break;
+    } else if (!force &&
+               (mem_->ApproximateMemoryUsage() <= write_buffer_size)) {
+      // There is room in current memtable
+      break;
+    } else if (imm_ != nullptr) {
+      // We have filled up the current memtable, but the previous
+      // one is still being compacted, so we wait.
+      Log(options_.info_log, "Current memtable full; waiting...\n");
+      background_work_finished_signal_.Wait();
+    } else {
+      // Attempt to switch to a new memtable and trigger compaction of old
+      assert(versions_->PrevLogNumber() == 0);
+      uint64_t new_log_number = versions_->NewFileNumber();
+      WritableFile* lfile = nullptr;
+      s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
+      if (!s.ok()) {
+        // Avoid chewing through file number space in a tight loop.
+        versions_->ReuseFileNumber(new_log_number);
+        break;
+      }
+      delete log_;
+      delete logfile_;
+      logfile_ = lfile;
+      logfile_number_ = new_log_number;
+      log_ = new log::Writer(lfile);
+      imm_ = mem_;
+      has_imm_.store(true, std::memory_order_release);
+      mem_ = new MemTable(internal_comparator_);
+      mem_->Ref();
+      force = false;  // Do not force another compaction if have room
+	  env_->Schedule(&DBImpl::CMWork, this);      
+	  // MaybeScheduleCompaction();
+    }
+  }
+  return s;
+}
+
+// REQUIRES: mutex_ is held
+// REQUIRES: this thread is currently at the front of the writer queue
 Status DBImpl::MakeRoomForWrite(bool force) {
   //printf("In make room for write method\n");
   mutex_.AssertHeld();
@@ -1429,11 +1503,11 @@ Status DBImpl::MakeRoomForWrite(bool force) {
                (mem_->ApproximateMemoryUsage() <= write_buffer_size)) {
       // There is room in current memtable
       break;
-    } else if (imm_ != nullptr) {
-      // We have filled up the current memtable, but the previous
-      // one is still being compacted, so we wait.
-      Log(options_.info_log, "Current memtable full; waiting...\n");
-      background_work_finished_signal_.Wait();
+    // } else if (imm_ != nullptr) {
+    //   // We have filled up the current memtable, but the previous
+    //   // one is still being compacted, so we wait.
+    //   Log(options_.info_log, "Current memtable full; waiting...\n");
+    //   background_work_finished_signal_.Wait();
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // There are too many level-0 files.
       Log(options_.info_log, "Too many L0 files; waiting...\n");
