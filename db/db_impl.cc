@@ -44,8 +44,8 @@ int compaction_scheduled_count = 0;
 double total_data = 0;
 double prev_data = 0;
 double throughput = 0;
-size_t write_buffer_size = 4*1024*1024;
-double WORKLOAD_DURATION = 40000000;
+size_t write_buffer_size = 32*1024*1024;
+double WORKLOAD_DURATION = 50000000;
 
 const int kNumNonTableCacheFiles = 10;
 
@@ -582,7 +582,7 @@ void DBImpl::CompactMemTable() {
     imm_->Unref();
     imm_ = nullptr;
     has_imm_.store(false, std::memory_order_release);
-    RemoveObsoleteFiles();
+    // RemoveObsoleteFiles();
   } else {
     RecordBackgroundError(s);
   }
@@ -702,7 +702,12 @@ void DBImpl::CompactMemTableCall() {
       const uint64_t imm_start = env_->NowMicros();
       mutex_.Lock();
       if (imm_ != nullptr) {
+        VersionSet::LevelSummaryStorage tmp;
+        // printf("Before compactMemtable. Files now %s\n", versions_->LevelSummary(&tmp));
+        // fflush(stdout);
         CompactMemTable();
+        // printf("After compactMemtable. Files now %s\n", versions_->LevelSummary(&tmp));
+        // fflush(stdout);
         // printf("Memtable compaction. Files now %d\n", versions_->NumLevelFiles(0));
         // background_work_finished_signal_.SignalAll();
       }
@@ -720,13 +725,14 @@ void DBImpl::BGWork(void* db) {
 
 void DBImpl::BackgroundCall() {
   MutexLock l(&mutex_);
-  printf("background_compaction_scheduled_:%d\n", background_compaction_scheduled_);
+  // printf("background_compaction_scheduled_:%d\n", background_compaction_scheduled_);
   assert(background_compaction_scheduled_);
   if (shutting_down_.load(std::memory_order_acquire)) {
     // No more background work when shutting down.
   } else if (!bg_error_.ok()) {
     // No more background work after a background error.
   } else {
+    // printf("Calling backgroundcompaction ---\n");
     BackgroundCompaction();
   }
 
@@ -739,8 +745,8 @@ void DBImpl::BackgroundCall() {
 }
 
 void DBImpl::BackgroundCompaction() {
-  printf("In background compaction\n");
-  fflush(stdout);
+  // printf("In background compaction\n");
+  // fflush(stdout);
   mutex_.AssertHeld();
 
   // if (imm_ != nullptr) {
@@ -820,8 +826,8 @@ void DBImpl::BackgroundCompaction() {
     manual_compaction_ = nullptr;
   }
 
-  printf("completed background compaction\n");
-  fflush(stdout);
+  // printf("completed background compaction\n");
+  // fflush(stdout);
 }
 
 void DBImpl::CleanupCompaction(CompactionState* compact) {
@@ -941,7 +947,7 @@ void DBImpl::UpdateThroughputScheduler(void* db) {
 void DBImpl::UpdateThroughput() {
   //printf("Inside updatethroughput\n");
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-  int interval = 11*1000;
+  int interval = 2*1000;
   double start_time = env_->NowMicros();
   while (env_->NowMicros() < start_time + WORKLOAD_DURATION) {
     // throughput = (total_data - prev_data)*1000 / (interval*1048576);
