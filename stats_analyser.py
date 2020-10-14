@@ -134,7 +134,7 @@ def plot_compaction_data(input_file, total_time):
         plt.yticks(np.arange(-1, 8, 1))
         plt.xlabel("time")
         plt.ylabel("level")
-        plt.savefig("/users/arijit/leveldb//compaction_graphs/level_wise_compaction.png")
+        plt.savefig("/users/arijitx/leveldb//compaction_graphs/level_wise_compaction.png")
         plt.clf()
         colors = ["0.9", "0.6", "0.3", "0.05"]
         print(header)
@@ -159,18 +159,18 @@ def plot_compaction_data(input_file, total_time):
             color_list.append(colors[level])
             widths.append(float(line[header.index("end_time")])-float(line[header.index("start_time")]))
         
-        plot(x, y_read_total, "time", "Total compaction data read (MB)", "/users/arijit/leveldb//compaction_graphs/compaction_data_read_total.png", \
+        plot(x, y_read_total, "time", "Total compaction data read (MB)", "/users/arijitx/leveldb//compaction_graphs/compaction_data_read_total.png", \
             color_list, widths, 10, 100)
-        plot(x, y_written_total, "time", "Total compaction data written (MB)", "/users/arijit/leveldb//compaction_graphs/compaction_data_written_total.png", \
+        plot(x, y_written_total, "time", "Total compaction data written (MB)", "/users/arijitx/leveldb//compaction_graphs/compaction_data_written_total.png", \
             color_list, widths, 10, 100)
-        plot(x, y_read, "time", "Compaction data read (MB)", "/users/arijit/leveldb//compaction_graphs/compaction_data_read.png", \
+        plot(x, y_read, "time", "Compaction data read (MB)", "/users/arijitx/leveldb//compaction_graphs/compaction_data_read.png", \
             color_list, widths, 10, 10)
-        plot(x, y_written, "time", "Compaction data written (MB)", "/users/arijit/leveldb//compaction_graphs/compaction_data_written.png", \
+        plot(x, y_written, "time", "Compaction data written (MB)", "/users/arijitx/leveldb//compaction_graphs/compaction_data_written.png", \
             color_list, widths, 10, 10)
 
 def plot_cdf(file_name, column):
     data = []
-    with open("/users/arijit/leveldb//test.csv") as f:
+    with open("/users/arijitx/leveldb//test.csv") as f:
         lines = f.readlines()
         for line in lines[1:]:
             line = line.split(",")
@@ -183,29 +183,29 @@ def plot_cdf(file_name, column):
     plt.plot(bin_edges[1:], cdf/cdf[-1])
     plt.xlabel("compaction time (s)")
     plt.ylabel("Probability")
-    plt.savefig("/users/arijit/leveldb//compaction_graphs/compaction_time_cdf.png")
+    plt.savefig("/users/arijitx/leveldb//compaction_graphs/compaction_time_cdf.png")
     plt.clf()
     plt.hist(data, bins=40, label=len(data))
     plt.legend()
     plt.xlabel("Time for compaction (s)")
     plt.ylabel("Count of compactions")
-    plt.savefig("/users/arijit/leveldb//compaction_graphs/compaction_time_pdf.png")
+    plt.savefig("/users/arijitx/leveldb//compaction_graphs/compaction_time_pdf.png")
     plt.clf()
 
 
 if __name__ == "__main__":
     extra = ""
-    plotter("./build/background_stats.csv", "time", "memoryUsage", "/users/arijit/leveldb//graphs/memory" + extra + ".png", "time", "Memory usage (MB)")
-    plotter("./build/background_stats.csv", "time", "compactionScheduledCount", "/users/arijit/leveldb//graphs/compaction" + extra + ".png", "time", "Number of compactions scheduled")
-    plotter("./build/background_stats.csv", "time", "levelWiseData::writes", "/users/arijit/leveldb//graphs/compaction_writes" + extra + ".png", "time", "Compaction writes (MB)")
-    plotter("./build/background_stats.csv", "time", "levelWiseData::reads", "/users/arijit/leveldb//graphs/compaction_reads" + extra + ".png", "time", "Compaction reads (MB)")
-    plotter("./build/background_stats.csv", "time", "levelWiseData::files", "/users/arijit/leveldb//graphs/files_created" + extra + ".png", "time", "Number of files created in the interval")
-    plotter("./build/background_stats.csv", "time", "levelWiseData::time", "/users/arijit/leveldb//graphs/compaction_time" + extra + ".png", "time", "Compaction time (s)")
-    plotter("./build/background_stats.csv", "time", "writeBufferSize", "/users/arijit/leveldb//graphs/write_buffer_size" + extra + ".png", "time", "Write buffer size (MB)")
-    plotter("./build/foreground_stats.csv", "time", "writes", "/users/arijit/leveldb//graphs/writes" + extra + ".png", "time", "Number of writes in the interval")
-    plotter("./build/foreground_stats.csv", "time", "throughput", "/users/arijit/leveldb//graphs/throughput" + extra + ".png", "time", "Throughput in the interval (MB/s)")
-    #plotter("./build/foreground_stats.csv", "time", "writes", "/users/arijit/leveldb//graphs/writes1" + extra + ".png", "time", "Total write data (MB)", True)
-    plotter("./build/foreground_stats.csv", "time", "data_written", "/users/arijit/leveldb//graphs/data_written" + extra + ".png", "time", "Total data written (MB)")
-    format_compaction_stats('/tmp/leveldbtest-5090/dbbench/LOG', '/users/arijit/leveldb/test.csv')
-    plot_compaction_data("/users/arijit/leveldb//test.csv", 100)
+    plotter("./build/background_stats.csv", "time", "memoryUsage", "/users/arijitx/leveldb//graphs/memory" + extra + ".png", "time", "Memory usage (MB)")
+    plotter("./build/background_stats.csv", "time", "compactionScheduledCount", "/users/arijitx/leveldb//graphs/compaction" + extra + ".png", "time", "Number of compactions scheduled")
+    plotter("./build/background_stats.csv", "time", "levelWiseData::writes", "/users/arijitx/leveldb//graphs/compaction_writes" + extra + ".png", "time", "Compaction writes (MB)")
+    plotter("./build/background_stats.csv", "time", "levelWiseData::reads", "/users/arijitx/leveldb//graphs/compaction_reads" + extra + ".png", "time", "Compaction reads (MB)")
+    plotter("./build/background_stats.csv", "time", "levelWiseData::files", "/users/arijitx/leveldb//graphs/files_created" + extra + ".png", "time", "Number of files created in the interval")
+    plotter("./build/background_stats.csv", "time", "levelWiseData::time", "/users/arijitx/leveldb//graphs/compaction_time" + extra + ".png", "time", "Compaction time (s)")
+    plotter("./build/background_stats.csv", "time", "writeBufferSize", "/users/arijitx/leveldb//graphs/write_buffer_size" + extra + ".png", "time", "Write buffer size (MB)")
+    plotter("./build/foreground_stats.csv", "time", "writes", "/users/arijitx/leveldb//graphs/writes" + extra + ".png", "time", "Number of writes in the interval")
+    plotter("./build/foreground_stats.csv", "time", "throughput", "/users/arijitx/leveldb//graphs/throughput" + extra + ".png", "time", "Throughput in the interval (MB/s)")
+    #plotter("./build/foreground_stats.csv", "time", "writes", "/users/arijitx/leveldb//graphs/writes1" + extra + ".png", "time", "Total write data (MB)", True)
+    plotter("./build/foreground_stats.csv", "time", "data_written", "/users/arijitx/leveldb//graphs/data_written" + extra + ".png", "time", "Total data written (MB)")
+    format_compaction_stats('/tmp/leveldbtest-20001/dbbench/LOG', '/users/arijitx/leveldb/test.csv')
+    plot_compaction_data("/users/arijitx/leveldb//test.csv", 100)
     # plot_cdf("", "")
