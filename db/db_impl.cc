@@ -44,8 +44,8 @@ int compaction_scheduled_count = 0;
 double total_data = 0;
 double prev_data = 0;
 double throughput = 0;
-size_t write_buffer_size = 2*1024*1024;
-double WORKLOAD_DURATION = 10000000;
+size_t write_buffer_size = 4*1024*1024;
+double WORKLOAD_DURATION = 100000000;
 
 const int kNumNonTableCacheFiles = 10;
 
@@ -513,7 +513,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   return status;
 }
 
-Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
+Status DBImpl:: WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
   const uint64_t start_micros = env_->NowMicros();
@@ -961,15 +961,30 @@ void DBImpl::UpdateThroughputScheduler(void* db) {
 
 void DBImpl::UpdateThroughput() {
   //printf("Inside updatethroughput\n");
-  int interval = 1*1000;
+  // int interval = 35*1000;
   double start_time = env_->NowMicros();
+  double compaction_start = 0, compaction_end = 0;
+  std::vector<int> compaction_times({15, 25, 55, 65, 95, 105});
+  int prev_compaction = 0;
+  int ctr = 0;
   while (env_->NowMicros() < start_time + WORKLOAD_DURATION) {
-    if (env_->NowMicros() + interval*1000 < start_time + WORKLOAD_DURATION) {
-    	std::this_thread::sleep_for(std::chrono::milliseconds(interval));
-    } else {
-      	break;
-    }
+    int updated_interval = compaction_times[ctr]*1000 - prev_compaction*1000 + (compaction_start - compaction_end)/1e3;
+    // if (env_->NowMicros() + interval*1000 < start_time + WORKLOAD_DURATION) {
+    // 	std::this_thread::sleep_for(std::chrono::milliseconds(updated_interval));
+    // } else {
+    //   	break;
+    // }
+    
+    std::this_thread::sleep_for(std::chrono::milliseconds(updated_interval));
+    
+    compaction_start = env_->NowMicros();
+    printf("Starting after %d ms\n", updated_interval);
     BackgroundCall();
+    prev_compaction = compaction_times[ctr];
+    ctr++;
+    if (ctr == compaction_times.size())
+      break;
+    compaction_end = env_->NowMicros();
   }
 }
 
@@ -1511,11 +1526,11 @@ Status DBImpl::MakeRoomForWrite(bool force) {
                (mem_->ApproximateMemoryUsage() <= write_buffer_size)) {
       // There is room in current memtable
       break;
-    // } else if (imm_ != nullptr) {
+    } else if (imm_ != nullptr) {
     //   // We have filled up the current memtable, but the previous
     //   // one is still being compacted, so we wait.
-    //   Log(options_.info_log, "Current memtable full; waiting...\n");
-    //   background_work_finished_signal_.Wait();
+      Log(options_.info_log, "Current memtable full; waiting...\n");
+      background_work_finished_signal_.Wait();
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // There are too many level-0 files.
       Log(options_.info_log, "Too many L0 files; waiting...\n");
