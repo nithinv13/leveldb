@@ -701,15 +701,15 @@ void DBImpl::CMWork(void* db) {
 }
 
 void DBImpl::CompactMemTableCall() {
-  if (background_compaction_scheduled_) {
-    // background_work_finished_signal_.Wait();
-    return;
-  }
+  // if (background_compaction_scheduled_) {
+  //   // background_work_finished_signal_.Wait();
+  //   return;
+  // }
+  mutex_.Lock();
   compact_mem_table_scheduled_ = true;
 	int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
   	if (has_imm_.load(std::memory_order_relaxed)) {
       const uint64_t imm_start = env_->NowMicros();
-      mutex_.Lock();
       if (imm_ != nullptr) {
         VersionSet::LevelSummaryStorage tmp;
         // printf("Before compactMemtable. Files now %s\n", versions_->LevelSummary(&tmp));
@@ -720,11 +720,11 @@ void DBImpl::CompactMemTableCall() {
         // printf("Memtable compaction. Files now %d\n", versions_->NumLevelFiles(0));
         // background_work_finished_signal_.SignalAll();
       }
-      mutex_.Unlock();
       imm_micros += (env_->NowMicros() - imm_start);
     }
-  compact_mem_table_scheduled_ = false;
-  compact_memtable_finished_.SignalAll();
+  // compact_mem_table_scheduled_ = false;
+  // compact_memtable_finished_.SignalAll();
+  mutex_.Unlock();
 }
 
 
@@ -735,10 +735,10 @@ void DBImpl::BGWork(void* db) {
 }
 
 void DBImpl::BackgroundCall() {
-  if (compact_mem_table_scheduled_) {
-    compact_memtable_finished_.Wait();
-  }
-  background_compaction_scheduled_ = true;
+  // if (compact_mem_table_scheduled_) {
+  //   compact_memtable_finished_.Wait();
+  // }
+  // background_compaction_scheduled_ = true;
   MutexLock l(&mutex_);
   // printf("background_compaction_scheduled_:%d\n", background_compaction_scheduled_);
   assert(background_compaction_scheduled_);
@@ -756,8 +756,8 @@ void DBImpl::BackgroundCall() {
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
   // MaybeScheduleCompaction();
-  background_compaction_scheduled_ = false;
-  background_work_finished_signal_.SignalAll();
+  // background_compaction_scheduled_ = false;
+  // background_work_finished_signal_.SignalAll();
 }
 
 void DBImpl::BackgroundCompaction() {
