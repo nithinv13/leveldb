@@ -820,6 +820,7 @@ class Benchmark {
               bytes += value_size_ + strlen(key);
               thread->stats.FinishedSingleOp();
             }
+            // write_options_.sync = true;
             s = db_->Write(write_options_, &batch);
             if (!s.ok()) {
               std::fprintf(stderr, "put error: %s\n", s.ToString().c_str());

@@ -45,7 +45,7 @@ double total_data = 0;
 double prev_data = 0;
 double throughput = 0;
 size_t write_buffer_size = 4*1024*1024;
-double WORKLOAD_DURATION = 100000000;
+double WORKLOAD_DURATION = 120000000;
 
 const int kNumNonTableCacheFiles = 10;
 
@@ -787,7 +787,8 @@ void DBImpl::BackgroundCompaction() {
         (m->end ? m->end->DebugString().c_str() : "(end)"),
         (m->done ? "(end)" : manual_end.DebugString().c_str()));
   } else {
-    c = versions_->PickCompaction();
+    // c = versions_->PickCompaction();
+    c = versions_->ForceCompaction(0);
   }
 
   Status status;
@@ -964,7 +965,7 @@ void DBImpl::UpdateThroughput() {
   // int interval = 35*1000;
   double start_time = env_->NowMicros();
   double compaction_start = 0, compaction_end = 0;
-  std::vector<int> compaction_times({15, 25, 55, 65, 95, 105});
+  std::vector<int> compaction_times({11, 51, 91});
   int prev_compaction = 0;
   int ctr = 0;
   while (env_->NowMicros() < start_time + WORKLOAD_DURATION) {
