@@ -1082,7 +1082,7 @@ class Benchmark {
     std::ofstream myfile;
     myfile.open("background_stats.csv");
     myfile << "time," << "mayBeScheduleCompactionCount," << "compactionScheduledCount," << "memoryUsage," << "levelWiseData," << \
-    "writeBufferSize," << std::endl;
+    "writeBufferSize," << "MemTableSize," << std::endl;
     double current_time = leveldb::g_env->NowMicros();
     double prev_compaction = 0;
     while (leveldb::g_env->NowMicros() < current_time + FLAGS_workload_duration*pow(10, 6)) {
@@ -1098,10 +1098,12 @@ class Benchmark {
       status = db1->GetProperty(leveldb::Slice("leveldb.level-wise-data"), &level_wise_data);
       std::string write_buffer_size;
       status = db1->GetProperty(leveldb::Slice("leveldb.write-buffer-size"), &write_buffer_size);
+      std::string memtable_size;
+      status = db1->GetProperty(leveldb::Slice("leveldb.memtable-size"), &memtable_size);
       //printf("sstables = %s\n", sstables.c_str());
       myfile << std::to_string(leveldb::g_env->NowMicros()) << "," << maybe_count.c_str() << "," << std::to_string(std::stod(scheduled_count)-prev_compaction) << "," << \
       std::to_string((std::stod(memory_usage) / 1048576.0)).c_str() << "," << level_wise_data << "," << \
-      std::to_string(std::stod(write_buffer_size) / 1048576.0) << std::endl;
+      std::to_string(std::stod(write_buffer_size) / 1048576.0) << "," << std::to_string(std::stod(memtable_size) / 1048576.0) << std::endl;
       prev_compaction = std::stod(scheduled_count);
       sleep(1);
   }

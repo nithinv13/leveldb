@@ -787,8 +787,8 @@ void DBImpl::BackgroundCompaction() {
         (m->end ? m->end->DebugString().c_str() : "(end)"),
         (m->done ? "(end)" : manual_end.DebugString().c_str()));
   } else {
-    // c = versions_->PickCompaction();
-    c = versions_->ForceCompaction(0);
+    c = versions_->PickCompaction();
+    // c = versions_->ForceCompaction(0);
   }
 
   Status status;
@@ -1459,6 +1459,7 @@ Status DBImpl::CompactMemTableForWrite(bool force) {
     // one is still being compacted, so we wait.
     // Log(options_.info_log, "Current memtable full; waiting...\n");
     // background_work_finished_signal_.Wait();
+    // compact_memtable_finished_.Wait();
   } else {
     // Attempt to switch to a new memtable and trigger compaction of old
     assert(versions_->PrevLogNumber() == 0);
@@ -1627,8 +1628,9 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     *value = std::to_string(compaction_scheduled_count);
   } else if (in == "write-buffer-size") {
     *value = std::to_string(write_buffer_size);
-  }
-  else if (in == "level-wise-data") {
+  } else if (in == "memtable-size") {
+    *value = std::to_string(mem_->ApproximateMemoryUsage());
+  } else if (in == "level-wise-data") {
     char buf[200];
     for (int level = 0; level < config::kNumLevels; level++) {
       int files = versions_->NumLevelFiles(level);
