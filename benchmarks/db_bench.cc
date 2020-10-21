@@ -546,6 +546,8 @@ class Benchmark {
       } else if (name == Slice("writerandomburstsbycount")) {
         method = &Benchmark::WriteRandomBurstsByCount;
       } else if (name == Slice("writeseqburstsbytime")) {
+        entries_per_batch_ = 1000;
+        write_options_.sync = true;
         method = &Benchmark::WriteSeqBurstsByTime;
       } else if (name == Slice("writeseqburstsbycount")) {
         method = &Benchmark::WriteSeqBurstsByCount;

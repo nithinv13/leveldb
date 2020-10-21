@@ -16,6 +16,8 @@ DSTAT_FNAME = "dstat.csv"
 LVLDB_FNAME = "foreground_stats.csv"
 WORKLOAD = "writerandomburstsbytime"
 DURATION = 200
+BATCH_SIZE = 1000
+SYNC = 1
 
 def main():
     parser = argparse.ArgumentParser()
@@ -42,10 +44,10 @@ def run():
     print("# Running Benchmark")
     if os.path.exists(DSTAT_FNAME):
         os.remove(DSTAT_FNAME) #dstat appends by default
-    dstat = Popen(["dstat", "-gdT", "--output="+DSTAT_FNAME], stdout=DEVNULL)
+    dstat = Popen(["dstat", "-gdT", "--cpu-use", "--output="+DSTAT_FNAME], stdout=DEVNULL)
     print("Dstat initialized.")
 
-    call([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=10", "--write_time_before_sleep=5", "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1"])
+    call([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=10", "--write_time_before_sleep=5", "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1"]) #, "--sync=%i"%SYNC)--batch_size=%i"%BATCH_SIZE])
 
     dstat.kill()
 
@@ -73,7 +75,7 @@ def plot():
     dstat.epoch = dstat.epoch - start_time
 
     fig = plt.figure()
-    ax1 = fig.add_subplot(2,1,1)
+    ax1 = fig.add_subplot(3, 1, 1)
 
     # Dstat reports in kB while leveldb does in bytes
     ax1.plot(dstat['epoch'], dstat['dsk/total:writ'], label="Disk writes")
@@ -85,7 +87,7 @@ def plot():
 
     ax1.legend()
 
-    ax2 = fig.add_subplot(2,1,2)
+    ax2 = fig.add_subplot(3, 1, 2)
     level_data = {}
 
     for (epoch_num, level_str) in enumerate(bg.levelWiseData):
@@ -110,15 +112,29 @@ def plot():
 
             level_data[level_num].append(size)
 
-    labels = ["Level %i" %num for num in level_data.keys()]
+    labels = ["Level %i" %num for num in level_data]
     sizes = level_data.values()
 
     ax2.stackplot(bg['time'], sizes, labels=labels)
 
     ax2.set_ylabel('Size (Mb)')
-    ax2.set_xlabel('Time (seconds)')
-
     ax2.legend()
+
+    ax3 = fig.add_subplot(3, 1, 3)
+    pos = 0
+    while True:
+        #did we enumerate all cores?
+        if str(pos) not in dstat.columns:
+            break
+
+        ax3.plot(dstat['epoch'], dstat[str(pos)], label="CPU #%i"%pos)
+        pos += 1
+
+    print("Found %i CPU cores" % pos)
+
+    ax3.set_ylabel('CPU Usage (%)')
+    ax3.legend()
+    ax3.set_xlabel('Time (seconds)')
 
     fig.savefig('dstat.pdf')
 
