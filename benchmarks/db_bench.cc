@@ -131,6 +131,8 @@ static int FLAGS_write_time_before_sleep = 10;
 static int FLAGS_sleep_duration = 2;
 static int FLAGS_write_count_before_sleep = 10000;
 
+constexpr double ONE_SECOND = 1000.0*1000.0;
+
 namespace leveldb {
 
 namespace {
@@ -808,9 +810,9 @@ class Benchmark {
       int64_t i = 0;
       double current_time = g_env->NowMicros();
       prev_time = g_env->NowMicros();
-      while (g_env->NowMicros() < current_time + FLAGS_workload_duration*pow(10, 6)) {
+      while (g_env->NowMicros() < current_time + FLAGS_workload_duration*ONE_SECOND) {
         double time = g_env->NowMicros();
-        while (g_env->NowMicros() < time + FLAGS_write_time_before_sleep*pow(10, 6)) {
+        while (g_env->NowMicros() < time + FLAGS_write_time_before_sleep*ONE_SECOND) {
             batch.Clear();
             for (int j = 0; j < entries_per_batch_; j++) {
               const int k = seq ? i : (thread->rand.Next() % FLAGS_num);
@@ -820,7 +822,7 @@ class Benchmark {
               bytes += value_size_ + strlen(key);
               thread->stats.FinishedSingleOp();
             }
-            // write_options_.sync = true;
+            //write_options_.sync = true;
             s = db_->Write(write_options_, &batch);
             if (!s.ok()) {
               std::fprintf(stderr, "put error: %s\n", s.ToString().c_str());
@@ -831,8 +833,9 @@ class Benchmark {
             //   sleep(1);
             // } 
             double log_time = g_env->NowMicros();
-            if (log_time > prev_time + 1000000.0) {
-                double throughput = (bytes - prev_bytes) / (log_time - prev_time);
+            if (log_time > prev_time + ONE_SECOND) {
+                // throughput in bytes/s
+                double throughput = ((bytes - prev_bytes)*ONE_SECOND) / (log_time - prev_time);
                 double writes = total_writes - prev_writes;
                 stats_file << std::to_string(log_time) << "," << std::to_string(writes) << "," << std::to_string(throughput) << "," \
                 << std::to_string(bytes / (1024*1024)) << std::endl;
@@ -841,7 +844,17 @@ class Benchmark {
                 prev_time = log_time;
             }
           }
-          sleep(FLAGS_sleep_duration);
+
+          // log once a second while we are sleeping
+          for(auto i = 0; i < FLAGS_sleep_duration; ++i) {
+              double log_time = g_env->NowMicros();
+              double throughput = 0.0;
+              double writes = 0.0;
+
+              stats_file << std::to_string(log_time) << "," << std::to_string(writes) << "," << std::to_string(throughput) << "," \
+                << std::to_string(bytes / (1024*1024)) << std::endl;
+              sleep(1);
+           }
         }
       thread->stats.AddBytes(bytes);
       th.join();
@@ -884,8 +897,10 @@ class Benchmark {
           current_writes += entries_per_batch_;
           total_writes += entries_per_batch_;
           double log_time = g_env->NowMicros();
-          if (log_time > prev_time + 1000000.0) {
-              double throughput = (bytes - prev_bytes) / (log_time - prev_time);
+          
+          if (log_time > prev_time + ONE_SECOND) {
+              // throughput in bytes/s
+              double throughput = ((bytes - prev_bytes)*ONE_SECOND) / (log_time - prev_time);
               double writes = total_writes - prev_writes;
               stats_file << std::to_string(log_time) << "," << std::to_string(writes) << "," << std::to_string(throughput) << "," \
               << std::to_string(bytes / (1024*1024)) << std::endl;
@@ -1082,7 +1097,7 @@ class Benchmark {
     std::ofstream myfile;
     myfile.open("background_stats.csv");
     myfile << "time," << "mayBeScheduleCompactionCount," << "compactionScheduledCount," << "memoryUsage," << "levelWiseData," << \
-    "writeBufferSize," << "MemTableSize," << std::endl;
+    "writeBufferSize," << std::endl;
     double current_time = leveldb::g_env->NowMicros();
     double prev_compaction = 0;
     while (leveldb::g_env->NowMicros() < current_time + FLAGS_workload_duration*pow(10, 6)) {
@@ -1098,12 +1113,10 @@ class Benchmark {
       status = db1->GetProperty(leveldb::Slice("leveldb.level-wise-data"), &level_wise_data);
       std::string write_buffer_size;
       status = db1->GetProperty(leveldb::Slice("leveldb.write-buffer-size"), &write_buffer_size);
-      std::string memtable_size;
-      status = db1->GetProperty(leveldb::Slice("leveldb.memtable-size"), &memtable_size);
       //printf("sstables = %s\n", sstables.c_str());
       myfile << std::to_string(leveldb::g_env->NowMicros()) << "," << maybe_count.c_str() << "," << std::to_string(std::stod(scheduled_count)-prev_compaction) << "," << \
       std::to_string((std::stod(memory_usage) / 1048576.0)).c_str() << "," << level_wise_data << "," << \
-      std::to_string(std::stod(write_buffer_size) / 1048576.0) << "," << std::to_string(std::stod(memtable_size) / 1048576.0) << std::endl;
+      std::to_string(std::stod(write_buffer_size) / 1048576.0) << std::endl;
       prev_compaction = std::stod(scheduled_count);
       sleep(1);
   }
