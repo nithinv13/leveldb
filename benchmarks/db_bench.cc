@@ -9,6 +9,7 @@
 #include <iostream>
 #include <thread>
 #include <fstream>
+#include <atomic>
 
 #include "leveldb/cache.h"
 #include "leveldb/db.h"
@@ -803,7 +804,8 @@ class Benchmark {
       double prev_time = g_env->NowMicros();
       double prev_writes = 0;
       double total_writes = 0;
-      std::thread th(CollectStats, &db_);
+      std::atomic<bool> shutting_down(false);
+      std::thread collect_stats(CollectStats, db_, &shutting_down);
       sleep(1);
       RandomGenerator gen;
       WriteBatch batch;
@@ -859,7 +861,8 @@ class Benchmark {
            }
         }
       thread->stats.AddBytes(bytes);
-      th.join();
+      shutting_down = true;
+      collect_stats.join();
       printf("Total data written = %.1f MB \n", bytes / pow(1024, 2));
   }
 
@@ -872,7 +875,8 @@ class Benchmark {
       double prev_time = g_env->NowMicros();
       double prev_writes = 0;
       double total_writes = 0;
-      std::thread th(CollectStats, &db_);
+      std::atomic<bool> shutting_down(false);
+      std::thread collect_stats(CollectStats, db_, &shutting_down);
       sleep(1);
       int i = 0;
       RandomGenerator gen;
@@ -915,7 +919,8 @@ class Benchmark {
         i += FLAGS_write_count_before_sleep;
       }
       thread->stats.AddBytes(bytes);
-      th.join();
+      shutting_down = true;
+      collect_stats.join();
       printf("Total data written = %.1f MB \n", bytes / pow(10, 6));
   }
 
@@ -1093,8 +1098,7 @@ class Benchmark {
     }
   }
 
-  static void CollectStats(leveldb::DB** db) {
-    leveldb::DB* db1 = *db;
+  static void CollectStats(leveldb::DB* db, std::atomic<bool> *shutting_down) {
     printf("In the collect stats thread\n");
     std::ofstream myfile;
     myfile.open("background_stats.csv");
@@ -1102,19 +1106,20 @@ class Benchmark {
     "writeBufferSize," << std::endl;
     double current_time = leveldb::g_env->NowMicros();
     double prev_compaction = 0;
-    while (leveldb::g_env->NowMicros() < current_time + FLAGS_workload_duration*ONE_SECOND) {
+
+    while(!shutting_down->load(std::memory_order_acquire)) {
       std::string maybe_count;
-      bool status = db1->GetProperty(leveldb::Slice("leveldb.may-be-schedule-compaction-count"), &maybe_count);
+      bool status = db->GetProperty(leveldb::Slice("leveldb.may-be-schedule-compaction-count"), &maybe_count);
       std::string scheduled_count;
-      status = db1->GetProperty(leveldb::Slice("leveldb.compaction-scheduled-count"), &scheduled_count);
+      status = db->GetProperty(leveldb::Slice("leveldb.compaction-scheduled-count"), &scheduled_count);
       std::string memory_usage;
-      status = db1->GetProperty(leveldb::Slice("leveldb.approximate-memory-usage"), &memory_usage);
+      status = db->GetProperty(leveldb::Slice("leveldb.approximate-memory-usage"), &memory_usage);
       std::string sstables;
-      status = db1->GetProperty(leveldb::Slice("leveldb.sstables"), &sstables);
+      status = db->GetProperty(leveldb::Slice("leveldb.sstables"), &sstables);
       std::string level_wise_data;
-      status = db1->GetProperty(leveldb::Slice("leveldb.level-wise-data"), &level_wise_data);
+      status = db->GetProperty(leveldb::Slice("leveldb.level-wise-data"), &level_wise_data);
       std::string write_buffer_size;
-      status = db1->GetProperty(leveldb::Slice("leveldb.write-buffer-size"), &write_buffer_size);
+      status = db->GetProperty(leveldb::Slice("leveldb.write-buffer-size"), &write_buffer_size);
       //printf("sstables = %s\n", sstables.c_str());
       myfile << std::to_string(leveldb::g_env->NowMicros()) << "," << maybe_count.c_str() << "," << std::to_string(std::stod(scheduled_count)-prev_compaction) << "," << \
       std::to_string((std::stod(memory_usage) / 1048576.0)).c_str() << "," << level_wise_data << "," << \
