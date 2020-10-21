@@ -1100,7 +1100,7 @@ class Benchmark {
     "writeBufferSize," << std::endl;
     double current_time = leveldb::g_env->NowMicros();
     double prev_compaction = 0;
-    while (leveldb::g_env->NowMicros() < current_time + FLAGS_workload_duration*pow(10, 6)) {
+    while (leveldb::g_env->NowMicros() < current_time + FLAGS_workload_duration*ONE_SECOND) {
       std::string maybe_count;
       bool status = db1->GetProperty(leveldb::Slice("leveldb.may-be-schedule-compaction-count"), &maybe_count);
       std::string scheduled_count;

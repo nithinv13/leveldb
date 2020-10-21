@@ -37,7 +37,7 @@ def main():
 
 def run():
     print("# Loading data")
-    call([BINPATH+"/db_bench", "--benchmarks=fillseq", "--use_existing_db=0"])
+    call([BINPATH+"/db_bench", "--benchmarks=fillseq", "--use_existing_db=0", "--db="+DB_PATH])
 
     print("# Running Benchmark")
     if os.path.exists(DSTAT_FNAME):

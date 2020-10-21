@@ -145,6 +145,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       table_cache_(new TableCache(dbname_, options_, TableCacheSize(options_))),
       db_lock_(nullptr),
       shutting_down_(false),
+      last_write_(0),
       background_work_finished_signal_(&mutex_),
       compact_memtable_finished_(&mutex_),
       mem_(nullptr),
@@ -160,10 +161,9 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       manual_compaction_(nullptr),
       versions_(new VersionSet(dbname_, &options_, table_cache_,
                                &internal_comparator_)) {
-                                 std::thread th(&DBImpl::UpdateThroughput, this);
-                                 th.detach();
-                                 //env_->Schedule(&DBImpl::UpdateThroughputScheduler, this);
-                               }
+  compaction_thread_ = std::thread(&DBImpl::UpdateThroughput, this);
+  //env_->Schedule(&DBImpl::UpdateThroughputScheduler, this);
+}
 
 DBImpl::~DBImpl() {
   // Wait for background work to finish.
@@ -173,6 +173,8 @@ DBImpl::~DBImpl() {
     background_work_finished_signal_.Wait();
   }
   mutex_.Unlock();
+
+  compaction_thread_.join();
 
   if (db_lock_ != nullptr) {
     env_->UnlockFile(db_lock_);
@@ -742,7 +744,7 @@ void DBImpl::BackgroundCall() {
   // background_compaction_scheduled_ = true;
   MutexLock l(&mutex_);
   // printf("background_compaction_scheduled_:%d\n", background_compaction_scheduled_);
-  assert(background_compaction_scheduled_);
+  //assert(background_compaction_scheduled_);
   if (shutting_down_.load(std::memory_order_acquire)) {
     // No more background work when shutting down.
   } else if (!bg_error_.ok()) {
@@ -961,14 +963,19 @@ void DBImpl::UpdateThroughputScheduler(void* db) {
 }
 
 void DBImpl::UpdateThroughput() {
-  //printf("Inside updatethroughput\n");
   // int interval = 35*1000;
-  double start_time = env_->NowMicros();
-  double compaction_start = 0, compaction_end = 0;
-  std::vector<int> compaction_times({11, 51, 91});
-  int prev_compaction = 0;
-  int ctr = 0;
-  while (env_->NowMicros() < start_time + WORKLOAD_DURATION) {
+ // double start_time = env_->NowMicros();
+ // double compaction_start = 0, compaction_end = 0;
+
+  while(!shutting_down_.load(std::memory_order_acquire)) {
+      auto elapsed = env_->NowMicros() - last_write_.load(std::memory_order_acquire);
+      if(elapsed > 500*1000) {
+         BackgroundCall();
+      } else {
+         // FIXME do not busy wait
+         env_->SleepForMicroseconds(1000);
+      }
+     /*
     int updated_interval = compaction_times[ctr]*1000 - prev_compaction*1000 + (compaction_start - compaction_end)/1e3;
     // if (env_->NowMicros() + interval*1000 < start_time + WORKLOAD_DURATION) {
     // 	std::this_thread::sleep_for(std::chrono::milliseconds(updated_interval));
@@ -986,6 +993,7 @@ void DBImpl::UpdateThroughput() {
     if (ctr == compaction_times.size())
       break;
     compaction_end = env_->NowMicros();
+    */
   }
 }
 
@@ -1371,6 +1379,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     if (write_batch == tmp_batch_) tmp_batch_->Clear();
 
     versions_->SetLastSequence(last_sequence);
+    last_write_ = env_->NowMicros();
   }
 
   while (true) {

@@ -9,6 +9,7 @@
 #include <deque>
 #include <set>
 #include <string>
+#include <thread>
 
 #include "db/dbformat.h"
 #include "db/log_writer.h"
@@ -190,6 +191,8 @@ class DBImpl : public DB {
   log::Writer* log_;
   uint32_t seed_ GUARDED_BY(mutex_);  // For sampling.
 
+  std::atomic<double> last_write_;
+
   // Queue of writers.
   std::deque<Writer*> writers_ GUARDED_BY(mutex_);
   WriteBatch* tmp_batch_ GUARDED_BY(mutex_);
@@ -212,6 +215,8 @@ class DBImpl : public DB {
   Status bg_error_ GUARDED_BY(mutex_);
 
   CompactionStats stats_[config::kNumLevels] GUARDED_BY(mutex_);
+
+  std::thread compaction_thread_;
 };
 
 // Sanitize db options.  The caller should delete result.info_log if
