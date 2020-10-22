@@ -136,12 +136,23 @@ def save_fig(output_file):
 def special_plot(fig, x, y, x_title, y_title, color_list, widths, x_tick, y_tick, position):
     # fig = plt.figure()
     #ax1 = fig.add_subplot(position)
+<<<<<<< HEAD
+=======
+    
+    
+>>>>>>> cce843a00de9ab57f2ee2d06b6803c7a075aa0f5
     ax = plt.subplot(position)
     if widths:
         ax.bar(x, y, color=color_list, width=widths, align="edge")
     else:
         ax.bar(x, y)
     ax.set_ylabel(y_title)
+<<<<<<< HEAD
+=======
+    plt.ylim(0, 1100)
+    plt.xticks(np.arange(0, 120+1, step=x_tick))
+    plt.yticks(np.arange(0, max(y)+1, step=y_tick))
+>>>>>>> cce843a00de9ab57f2ee2d06b6803c7a075aa0f5
     # plt.savefig(HOME + "/graphs/tester2.png")
     return ax
 
@@ -186,6 +197,7 @@ def plot_compaction_data(input_file, total_time):
         
         fig = initialize_fig()
         plot(x, y_read_total, "time", "Total compaction data read (MB)", HOME + "/compaction_graphs/compaction_data_read_total.png", \
+<<<<<<< HEAD
             color_list, widths, 10, 100)
         plot(x, y_written_total, "time", "Total compaction data written (MB)", HOME + "/compaction_graphs/compaction_data_written_total.png", \
             color_list, widths, 10, 100)
@@ -197,6 +209,19 @@ def plot_compaction_data(input_file, total_time):
         ax2 = special_plot(fig, x, y_written, "time", "Compaction data written (MB)", color_list, widths, 10, 10, 312)
         x_data, y_data = plotter("./build/foreground_stats.csv", "time", "data_written", HOME + "/graphs/data_written" + extra + ".png", "time", "Total data written (MB)", ret=True)
         ax3 = special_plot(fig, x_data, y_data, "time", "Total data written", None, None, 10, 100, 313)
+=======
+            color_list, widths, 10, 100)
+        plot(x, y_written_total, "time", "Total compaction data written (MB)", HOME + "/compaction_graphs/compaction_data_written_total.png", \
+            color_list, widths, 10, 100)
+        plot(x, y_read, "time", "Compaction data read (MB)", HOME + "/compaction_graphs/compaction_data_read.png", \
+            color_list, widths, 10, 100)
+        plot(x, y_written, "time", "Compaction data written (MB)", HOME + "/compaction_graphs/compaction_data_written.png", \
+            color_list, widths, 10, 100)
+        ax1 = special_plot(fig, x, y_read, "time", "Compaction data \n read (MB)", color_list, widths, 10, 200, 311)
+        ax2 = special_plot(fig, x, y_written, "time", "Compaction data \n written (MB)", color_list, widths, 10, 200, 312)
+        x_data, y_data = plotter("./build/foreground_stats.csv", "time", "data_written", HOME + "/graphs/data_written" + extra + ".png", "time", "Total data written (MB)", ret=True)
+        ax3 = special_plot(fig, x_data, y_data, "time", "Total data \n written", None, None, 10, 200, 313)
+>>>>>>> cce843a00de9ab57f2ee2d06b6803c7a075aa0f5
         plt.subplot(ax1)
         plt.subplot(ax2)
         plt.subplot(ax3)
@@ -228,6 +253,7 @@ def plot_cdf(file_name, column):
 
 
 if __name__ == "__main__":
+<<<<<<< HEAD
     HOME = "/users/nithinv"
     extra = ""
     # plotter("./build/background_stats.csv", "time", "memoryUsage", HOME + "/graphs/memory" + extra + ".png", "time", "Memory usage (MB)")
@@ -242,6 +268,23 @@ if __name__ == "__main__":
     # #plotter("./build/foreground_stats.csv", "time", "writes", HOME + "/graphs/writes1" + extra + ".png", "time", "Total write data (MB)", True)
     # plotter("./build/foreground_stats.csv", "time", "data_written", HOME + "/graphs/data_written" + extra + ".png", "time", "Total data written (MB)")
     # format_compaction_stats('/tmp/leveldbtest-20001/dbbench/LOG', HOME + '/test.csv')
+=======
+    HOME = "/users/arijitx/leveldb"
+    extra = ""
+    plotter("./build/background_stats.csv", "time", "memoryUsage", HOME + "/graphs/memory" + extra + ".png", "time", "Memory usage (MB)")
+    plotter("./build/background_stats.csv", "time", "compactionScheduledCount", HOME + "/graphs/compaction" + extra + ".png", "time", "Number of compactions scheduled")
+    plotter("./build/background_stats.csv", "time", "levelWiseData::writes", HOME + "/graphs/compaction_writes" + extra + ".png", "time", "Compaction writes (MB)")
+    plotter("./build/background_stats.csv", "time", "levelWiseData::reads", HOME + "/graphs/compaction_reads" + extra + ".png", "time", "Compaction reads (MB)")
+    plotter("./build/background_stats.csv", "time", "levelWiseData::files", HOME + "/graphs/files_created" + extra + ".png", "time", "Number of files created in the interval")
+    plotter("./build/background_stats.csv", "time", "levelWiseData::time", HOME + "/graphs/compaction_time" + extra + ".png", "time", "Compaction time (s)")
+    plotter("./build/background_stats.csv", "time", "writeBufferSize", HOME + "/graphs/write_buffer_size" + extra + ".png", "time", "Write buffer size (MB)")
+    plotter("./build/background_stats.csv", "time", "MemTableSize", HOME + "/graphs/memtable_size" + extra + ".png", "time", "Memtable size (MB)")
+    plotter("./build/foreground_stats.csv", "time", "writes", HOME + "/graphs/writes" + extra + ".png", "time", "Number of writes in the interval")
+    plotter("./build/foreground_stats.csv", "time", "throughput", HOME + "/graphs/throughput" + extra + ".png", "time", "Throughput in the interval (MB/s)")
+    #plotter("./build/foreground_stats.csv", "time", "writes", HOME + "/graphs/writes1" + extra + ".png", "time", "Total write data (MB)", True)
+    plotter("./build/foreground_stats.csv", "time", "data_written", HOME + "/graphs/data_written" + extra + ".png", "time", "Total data written (MB)")
+    format_compaction_stats('/tmp/leveldbtest-20001/dbbench/LOG', HOME + '/test.csv')
+>>>>>>> cce843a00de9ab57f2ee2d06b6803c7a075aa0f5
     plot_compaction_data(HOME + "/test.csv", 100)
     # plot_cdf("", "")
     # plot_test()
