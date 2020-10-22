@@ -1,4 +1,7 @@
 #! /usr/bin/python3
+'''
+Runs db_bench, collects disk and CPU stats, and plots the data.
+'''
 
 from subprocess import Popen, call, DEVNULL
 
@@ -15,9 +18,11 @@ BG_FNAME = "background_stats.csv"
 DSTAT_FNAME = "dstat.csv"
 LVLDB_FNAME = "foreground_stats.csv"
 WORKLOAD = "writerandomburstsbytime"
-DURATION = 200
+DURATION = 100
 BATCH_SIZE = 1000
 SYNC = 1
+BURST_LENGTH = 5
+SLEEP_DURATION = 10
 
 def main():
     parser = argparse.ArgumentParser()
@@ -44,15 +49,17 @@ def run():
     print("# Running Benchmark")
     if os.path.exists(DSTAT_FNAME):
         os.remove(DSTAT_FNAME) #dstat appends by default
-    dstat = Popen(["dstat", "-gdT", "--cpu-use", "--output="+DSTAT_FNAME], stdout=DEVNULL)
+    dstat = Popen(["dstat", "-gcdT", "--cpu-use", "--output="+DSTAT_FNAME], stdout=DEVNULL)
     print("Dstat initialized.")
 
-    call([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=10", "--write_time_before_sleep=5", "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1"]) #, "--sync=%i"%SYNC)--batch_size=%i"%BATCH_SIZE])
+    call([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH, "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1"])
+    #, "--sync=%i"%SYNC)--batch_size=%i"%BATCH_SIZE])
 
     dstat.kill()
 
 def plot():
     print("# Plotting")
+    burst_times = pandas.read_csv("burst_times.csv", skipinitialspace=True)
 
     dstat = pandas.read_csv(DSTAT_FNAME, header=5)
     lvldb = pandas.read_csv(LVLDB_FNAME)
@@ -60,6 +67,8 @@ def plot():
 
     lvldb.time = lvldb.time / (1000*1000)
     bg.time = bg.time / (1000*1000)
+    burst_times.start = burst_times.start / (1000*1000)
+    burst_times.end = burst_times.end / (1000*1000)
 
     start_time = lvldb.time.min()
     end_time = lvldb.time.max()
@@ -74,8 +83,13 @@ def plot():
     lvldb.time = lvldb.time - start_time
     dstat.epoch = dstat.epoch - start_time
 
-    fig = plt.figure()
-    ax1 = fig.add_subplot(3, 1, 1)
+    def highlight_bursts(ax, elapsed):
+        for _, row in burst_times.iterrows():
+            ax.axvspan(row["start"] - start_time, row["end"] - start_time, alpha=0.25, lw=0)
+
+    fig = plt.figure(figsize=(16,10))
+    ax1 = fig.add_subplot(4, 1, 1)
+    highlight_bursts(ax1, elapsed)
 
     # Dstat reports in kB while leveldb does in bytes
     ax1.plot(dstat['epoch'], dstat['dsk/total:writ'], label="Disk writes")
@@ -87,7 +101,8 @@ def plot():
 
     ax1.legend()
 
-    ax2 = fig.add_subplot(3, 1, 2)
+    ax2 = fig.add_subplot(4, 1, 2)
+    highlight_bursts(ax2, elapsed)
     level_data = {}
 
     for (epoch_num, level_str) in enumerate(bg.levelWiseData):
@@ -120,7 +135,8 @@ def plot():
     ax2.set_ylabel('Size (Mb)')
     ax2.legend()
 
-    ax3 = fig.add_subplot(3, 1, 3)
+    ax3 = fig.add_subplot(4, 1, 3)
+    highlight_bursts(ax3, elapsed)
     pos = 0
     while True:
         #did we enumerate all cores?
@@ -134,7 +150,19 @@ def plot():
 
     ax3.set_ylabel('CPU Usage (%)')
     ax3.legend()
-    ax3.set_xlabel('Time (seconds)')
+
+    ax4 = fig.add_subplot(4, 1, 4)
+    highlight_bursts(ax4, elapsed)
+
+    for name in ["idl", "usr", "sys"]:
+        ax4.plot(dstat['epoch'], dstat["total usage:"+name], label=name)
+
+    print("Found %i CPU cores" % pos)
+
+    ax4.set_ylabel('CPU Usage (%)')
+    ax4.legend()
+    ax4.set_xlabel('Time (seconds)')
+
 
     fig.savefig('dstat.pdf')
 

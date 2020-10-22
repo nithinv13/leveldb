@@ -11,6 +11,8 @@
 #include <fstream>
 #include <atomic>
 
+#include <gperftools/profiler.h>
+
 #include "leveldb/cache.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
@@ -132,7 +134,7 @@ static int FLAGS_write_time_before_sleep = 10;
 static int FLAGS_sleep_duration = 2;
 static int FLAGS_write_count_before_sleep = 10000;
 
-constexpr double ONE_SECOND = 1000.0*1000.0;
+constexpr uint64_t ONE_SECOND = 1000*1000;
 
 namespace leveldb {
 
@@ -797,8 +799,7 @@ class Benchmark {
 
   // Function to simulate periodic / bursts of writes based on write period and sleep period
   void WriteInBurstsTime(ThreadState* thread, bool seq) {
-      std::ofstream stats_file;
-      stats_file.open("foreground_stats.csv");
+      std::ofstream stats_file("foreground_stats.csv");
       stats_file << "time," << "writes," << "throughput," << "data_written," << std::endl;
       double prev_bytes = 0;
       double prev_time = g_env->NowMicros();
@@ -812,10 +813,16 @@ class Benchmark {
       Status s;
       int64_t bytes = 0;
       int64_t i = 0;
-      double current_time = g_env->NowMicros();
+      uint64_t current_time = g_env->NowMicros();
       prev_time = g_env->NowMicros();
+
+      std::ofstream burst_times("burst_times.csv");
+      burst_times << "start, end" << std::endl;
+
       while (g_env->NowMicros() < current_time + FLAGS_workload_duration*ONE_SECOND) {
-        double time = g_env->NowMicros();
+        uint64_t time = g_env->NowMicros();
+        ProfilerStart("./perf.out");
+
         while (g_env->NowMicros() < time + FLAGS_write_time_before_sleep*ONE_SECOND) {
             batch.Clear();
             for (int j = 0; j < entries_per_batch_; j++) {
@@ -836,7 +843,7 @@ class Benchmark {
             // if ((int)total_writes % 10000 == 0) {
             //   sleep(1);
             // } 
-            double log_time = g_env->NowMicros();
+            uint64_t log_time = g_env->NowMicros();
             if (log_time > prev_time + ONE_SECOND) {
                 // throughput in bytes/s
                 double throughput = ((bytes - prev_bytes)*ONE_SECOND) / (log_time - prev_time);
@@ -848,10 +855,13 @@ class Benchmark {
                 prev_time = log_time;
             }
           }
+          ProfilerStop();
+
+          burst_times << time << ", " << g_env->NowMicros() << std::endl;
 
           // log once a second while we are sleeping
           for(auto i = 0; i < FLAGS_sleep_duration; ++i) {
-              double log_time = g_env->NowMicros();
+              uint64_t log_time = g_env->NowMicros();
               double throughput = 0.0;
               double writes = 0.0;
 
