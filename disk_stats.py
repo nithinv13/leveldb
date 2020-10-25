@@ -23,6 +23,9 @@ BATCH_SIZE = 1000
 SYNC = 1
 BURST_LENGTH = 5
 SLEEP_DURATION = 10
+CGROUP_MEMORY_LIMIT = 50000000
+CGROUP_CPUS = "0-2"
+CGROUP_WRITE_THRESHOLD = 50000000
 
 def main():
     parser = argparse.ArgumentParser()
@@ -55,7 +58,7 @@ def create_cgroup():
     os.system("echo 50000000 | sudo tee /sys/fs/cgroup/memory/ldb/memory.limit_in_bytes")
     os.system("echo 0-2 | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.cpus")
     os.system("echo 0 | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.mems")
-    os.system("echo \'8:32 100000000\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
+    os.system("echo \'8:32 10000000\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
     # call(["echo", "50000000", "|", "sudo", "tee", "/sys/fs/cgroup/memory/ldb/memory.limit_in_bytes"])
     # call(["echo", "0-4", "|", "sudo", "tee", "/sys/fs/cgroup/cpuset/ldb/cpuset.cpus"])
     # call(["echo", "8:32 40000000", "|", "sudo", "tee", "/sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device"])
@@ -117,7 +120,7 @@ def plot():
     ax1.plot(dstat['epoch'], dstat['read'], label="Disk reads")
     ax1.plot(lvldb['time'], lvldb['throughput'], label='LevelDB writes')
 
-    ax1.set_ylabel('Throughput (kb/s)')
+    ax1.set_ylabel('Throughput (Kb/s)')
     #ax1.set_xlabel('Time (seconds)')
 
     ax1.legend()
