@@ -11,7 +11,7 @@
 #include <fstream>
 #include <atomic>
 
-#include <gperftools/profiler.h>
+// #include <gperftools/profiler.h>
 
 #include "leveldb/cache.h"
 #include "leveldb/db.h"
@@ -821,7 +821,7 @@ class Benchmark {
 
       while (g_env->NowMicros() < current_time + FLAGS_workload_duration*ONE_SECOND) {
         uint64_t time = g_env->NowMicros();
-        ProfilerStart("./perf.out");
+        // ProfilerStart("./perf.out");
 
         while (g_env->NowMicros() < time + FLAGS_write_time_before_sleep*ONE_SECOND) {
             batch.Clear();
@@ -855,7 +855,7 @@ class Benchmark {
                 prev_time = log_time;
             }
           }
-          ProfilerStop();
+          //ProfilerStop();
 
           burst_times << time << ", " << g_env->NowMicros() << std::endl;
 

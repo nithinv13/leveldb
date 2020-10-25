@@ -28,6 +28,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", action="store_true", default=False)
     parser.add_argument("--plot", action="store_true", default=False)
+    parser.add_argument("--cgroup", action="store_true", default=False)
 
     args = parser.parse_args()
 
@@ -37,10 +38,28 @@ def main():
     if args.plot:
         plot()
 
-    if args.plot or args.run:
+    if args.cgroup:
+        create_cgroup()
+
+    if args.plot or args.run or args.cgroup:
         print("Done.")
     else:
         print("Warning: No option selected. Doing nothing.")
+
+def create_cgroup():
+    print("# Creating cgroup")
+    call(["sudo", "cgcreate", "-g", "memory:ldb"])
+    call(["sudo", "cgcreate", "-g", "cpu:ldb"])
+    call(["sudo", "cgcreate", "-g", "blkio:ldb"])
+    call(["sudo", "cgcreate", "-g", "cpuset:ldb"])
+    os.system("echo 50000000 | sudo tee /sys/fs/cgroup/memory/ldb/memory.limit_in_bytes")
+    os.system("echo 0-2 | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.cpus")
+    os.system("echo 0 | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.mems")
+    os.system("echo \'8:32 100000000\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
+    # call(["echo", "50000000", "|", "sudo", "tee", "/sys/fs/cgroup/memory/ldb/memory.limit_in_bytes"])
+    # call(["echo", "0-4", "|", "sudo", "tee", "/sys/fs/cgroup/cpuset/ldb/cpuset.cpus"])
+    # call(["echo", "8:32 40000000", "|", "sudo", "tee", "/sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device"])
+    # call(["echo", "8:0 40000000", "|", "sudo", "tee", "/sys/fs/cgroup/cpuset/ldb/blkio.throttle.write_bps_device"]) # Use this for HDD
 
 def run():
     print("# Loading data")
@@ -92,9 +111,11 @@ def plot():
     highlight_bursts(ax1, elapsed)
 
     # Dstat reports in kB while leveldb does in bytes
-    ax1.plot(dstat['epoch'], dstat['dsk/total:writ'], label="Disk writes")
-    ax1.plot(dstat['epoch'], dstat['dsk/total:read'], label="Disk reads")
-    ax1.plot(lvldb['time'], lvldb['throughput'] / 1000.0, label='LevelDB writes')
+    print(dstat['writ'])
+    print(lvldb['throughput'])
+    ax1.plot(dstat['epoch'], dstat['writ'], label="Disk writes")
+    ax1.plot(dstat['epoch'], dstat['read'], label="Disk reads")
+    ax1.plot(lvldb['time'], lvldb['throughput'], label='LevelDB writes')
 
     ax1.set_ylabel('Throughput (kb/s)')
     #ax1.set_xlabel('Time (seconds)')
@@ -155,7 +176,7 @@ def plot():
     highlight_bursts(ax4, elapsed)
 
     for name in ["idl", "usr", "sys"]:
-        ax4.plot(dstat['epoch'], dstat["total usage:"+name], label=name)
+        ax4.plot(dstat['epoch'], dstat[name], label=name)
 
     print("Found %i CPU cores" % pos)
 
