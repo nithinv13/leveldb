@@ -11,7 +11,6 @@
 #include <fstream>
 #include <atomic>
 
-// #include <gperftools/profiler.h>
 
 #include "leveldb/cache.h"
 #include "leveldb/db.h"
@@ -24,6 +23,12 @@
 #include "util/mutexlock.h"
 #include "util/random.h"
 #include "util/testutil.h"
+
+#define ENABLE_PROFILING 0
+
+#if ENABLE_PROFILING
+#include <gperftools/profiler.h>
+#endif
 
 // Comma-separated list of operations to run in the specified order
 //   Actual benchmarks:
@@ -821,7 +826,9 @@ class Benchmark {
 
       while (g_env->NowMicros() < current_time + FLAGS_workload_duration*ONE_SECOND) {
         uint64_t time = g_env->NowMicros();
-        // ProfilerStart("./perf.out");
+#if ENABLE_PROFILING
+        ProfilerStart("./perf.out");
+#endif
 
         while (g_env->NowMicros() < time + FLAGS_write_time_before_sleep*ONE_SECOND) {
             batch.Clear();
@@ -855,7 +862,9 @@ class Benchmark {
                 prev_time = log_time;
             }
           }
-          //ProfilerStop();
+#if ENABLE_PROFILING
+          ProfilerStop();
+#endif
 
           burst_times << time << ", " << g_env->NowMicros() << std::endl;
 
@@ -1112,8 +1121,9 @@ class Benchmark {
     printf("In the collect stats thread\n");
     std::ofstream myfile;
     myfile.open("background_stats.csv");
-    myfile << "time," << "mayBeScheduleCompactionCount," << "compactionScheduledCount," << "memoryUsage," << "levelWiseData," << \
-    "writeBufferSize," << std::endl;
+    myfile << "time,mayBeScheduleCompactionCount,ompactionScheduledCount,memoryUsage,";
+    myfile << "levelWiseData,memtableSize,writeBufferSize," << std::endl;
+
     double current_time = leveldb::g_env->NowMicros();
     double prev_compaction = 0;
 
@@ -1128,12 +1138,14 @@ class Benchmark {
       status = db->GetProperty(leveldb::Slice("leveldb.sstables"), &sstables);
       std::string level_wise_data;
       status = db->GetProperty(leveldb::Slice("leveldb.level-wise-data"), &level_wise_data);
+      std::string memtable_size;
+      status = db->GetProperty(leveldb::Slice("leveldb.memtable-size"), &memtable_size);
       std::string write_buffer_size;
       status = db->GetProperty(leveldb::Slice("leveldb.write-buffer-size"), &write_buffer_size);
       //printf("sstables = %s\n", sstables.c_str());
-      myfile << std::to_string(leveldb::g_env->NowMicros()) << "," << maybe_count.c_str() << "," << std::to_string(std::stod(scheduled_count)-prev_compaction) << "," << \
-      std::to_string((std::stod(memory_usage) / 1048576.0)).c_str() << "," << level_wise_data << "," << \
-      std::to_string(std::stod(write_buffer_size) / 1048576.0) << std::endl;
+      myfile << std::to_string(leveldb::g_env->NowMicros()) << "," << maybe_count.c_str() << "," << std::to_string(std::stod(scheduled_count)-prev_compaction) << ",";
+      myfile << std::to_string((std::stod(memory_usage) / 1048576.0)).c_str() << "," << level_wise_data << ",";
+      myfile << memtable_size << "," << std::to_string(std::stod(write_buffer_size) / 1048576.0) << std::endl;
       prev_compaction = std::stod(scheduled_count);
       sleep(1);
   }

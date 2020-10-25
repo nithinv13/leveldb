@@ -20,6 +20,7 @@ LVLDB_FNAME = "foreground_stats.csv"
 WORKLOAD = "writerandomburstsbytime"
 DURATION = 100
 BATCH_SIZE = 1000
+VALUE_SIZE = 1000
 SYNC = 1
 BURST_LENGTH = 5
 SLEEP_DURATION = 10
@@ -74,7 +75,8 @@ def run():
     dstat = Popen(["dstat", "-gcdT", "--cpu-use", "--output="+DSTAT_FNAME], stdout=DEVNULL)
     print("Dstat initialized.")
 
-    call([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH, "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1"])
+    call([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH,
+        "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1", "--value_size=%i"%VALUE_SIZE])
     #, "--sync=%i"%SYNC)--batch_size=%i"%BATCH_SIZE])
 
     dstat.kill()
@@ -127,7 +129,7 @@ def plot():
 
     ax2 = fig.add_subplot(4, 1, 2)
     highlight_bursts(ax2, elapsed)
-    level_data = {}
+    level_data = {-1: [(i/(1024*1024)) for i in bg["memtableSize"]]}
 
     for (epoch_num, level_str) in enumerate(bg.levelWiseData):
         if level_str == "":
@@ -137,7 +139,7 @@ def plot():
             if substr == "":
                 continue
 
-            level_num, num_files, size, _, _, _ = substr.split(':')
+            level_num, _, size, _, _, _ = substr.split(':')
 
             level_num = int(level_num)
             size = float(size)
@@ -151,8 +153,13 @@ def plot():
 
             level_data[level_num].append(size)
 
-    labels = ["Level %i" %num for num in level_data]
-    sizes = level_data.values()
+    labels = []
+    sizes = []
+
+    for num, size in sorted(level_data.items(), key=lambda item: item[0]):
+        label = "Memtable" if num < 0 else "Level %i" %num
+        labels.append(label)
+        sizes.append(size)
 
     ax2.stackplot(bg['time'], sizes, labels=labels)
 
