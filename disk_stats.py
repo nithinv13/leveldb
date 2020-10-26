@@ -24,9 +24,11 @@ VALUE_SIZE = 1000
 SYNC = 1
 BURST_LENGTH = 5
 SLEEP_DURATION = 10
-CGROUP_MEMORY_LIMIT = 50000000
-CGROUP_CPUS = "0-2"
-CGROUP_WRITE_THRESHOLD = 50000000
+CGROUP_MEMORY_LIMIT = "50000000"
+CGROUP_CPUS = "0-7"
+CGROUP_WRITE_THRESHOLD = "8:32 100000000"
+CPUS_RANGE = CGROUP_CPUS.split("-")
+CPUS = [cpu for cpu in range(int(CPUS_RANGE[0]), int(CPUS_RANGE[-1])+1)]
 
 def main():
     parser = argparse.ArgumentParser()
@@ -56,14 +58,10 @@ def create_cgroup():
     call(["sudo", "cgcreate", "-g", "cpu:ldb"])
     call(["sudo", "cgcreate", "-g", "blkio:ldb"])
     call(["sudo", "cgcreate", "-g", "cpuset:ldb"])
-    os.system("echo 50000000 | sudo tee /sys/fs/cgroup/memory/ldb/memory.limit_in_bytes")
-    os.system("echo 0-2 | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.cpus")
+    os.system("echo " + CGROUP_MEMORY_LIMIT + " | sudo tee /sys/fs/cgroup/memory/ldb/memory.limit_in_bytes")
+    os.system("echo " + CGROUP_CPUS + " | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.cpus")
     os.system("echo 0 | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.mems")
-    os.system("echo \'8:32 10000000\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
-    # call(["echo", "50000000", "|", "sudo", "tee", "/sys/fs/cgroup/memory/ldb/memory.limit_in_bytes"])
-    # call(["echo", "0-4", "|", "sudo", "tee", "/sys/fs/cgroup/cpuset/ldb/cpuset.cpus"])
-    # call(["echo", "8:32 40000000", "|", "sudo", "tee", "/sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device"])
-    # call(["echo", "8:0 40000000", "|", "sudo", "tee", "/sys/fs/cgroup/cpuset/ldb/blkio.throttle.write_bps_device"]) # Use this for HDD
+    os.system("echo \'" + CGROUP_WRITE_THRESHOLD + "\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
 
 def run():
     print("# Loading data")
@@ -72,7 +70,7 @@ def run():
     print("# Running Benchmark")
     if os.path.exists(DSTAT_FNAME):
         os.remove(DSTAT_FNAME) #dstat appends by default
-    dstat = Popen(["dstat", "-gcdT", "--cpu-use", "--output="+DSTAT_FNAME], stdout=DEVNULL)
+    dstat = Popen(["dstat", "-C", ",".join(list(map(str, CPUS))) , "-gcdT", "--cpu-use", "--output="+DSTAT_FNAME], stdout=DEVNULL)
     print("Dstat initialized.")
 
     call([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH,
@@ -106,6 +104,10 @@ def plot():
     bg.time = bg.time - start_time
     lvldb.time = lvldb.time - start_time
     dstat.epoch = dstat.epoch - start_time
+    lvldb.loc[lvldb['time'] < 10, 'throughput'] = 0
+    dstat.loc[dstat['epoch'] < 10, 'writ'] = 0 
+    dstat.loc[dstat['epoch'] < 10, 'read'] = 0 
+    # bg.loc[bg['time'] < 10, 'time'] = 0 
 
     def highlight_bursts(ax, elapsed):
         for _, row in burst_times.iterrows():
@@ -129,7 +131,7 @@ def plot():
 
     ax2 = fig.add_subplot(4, 1, 2)
     highlight_bursts(ax2, elapsed)
-    level_data = {-1: [(i/(1024*1024)) for i in bg["memtableSize"]]}
+    level_data = {-1: [(i) for i in bg["memoryUsage"]]}
 
     for (epoch_num, level_str) in enumerate(bg.levelWiseData):
         if level_str == "":
@@ -168,16 +170,21 @@ def plot():
 
     ax3 = fig.add_subplot(4, 1, 3)
     highlight_bursts(ax3, elapsed)
-    pos = 0
-    while True:
-        #did we enumerate all cores?
-        if str(pos) not in dstat.columns:
-            break
 
-        ax3.plot(dstat['epoch'], dstat[str(pos)], label="CPU #%i"%pos)
-        pos += 1
+    cpus = CGROUP_CPUS.split("-")
+    for cpu in range(int(cpus[0]), int(cpus[-1])+1):
+        ax3.plot(dstat['epoch'], dstat[str(cpu)], label="CPU #%i"%cpu)
 
-    print("Found %i CPU cores" % pos)
+    # pos = 0
+    # while True:
+    #     #did we enumerate all cores?
+    #     if str(pos) not in dstat.columns:
+    #         break
+
+    #     ax3.plot(dstat['epoch'], dstat[str(pos)], label="CPU #%i"%pos)
+    #     pos += 1
+
+    # print("Found %i CPU cores" % pos)
 
     ax3.set_ylabel('CPU Usage (%)')
     ax3.legend()
@@ -185,10 +192,12 @@ def plot():
     ax4 = fig.add_subplot(4, 1, 4)
     highlight_bursts(ax4, elapsed)
 
-    for name in ["idl", "usr", "sys"]:
-        ax4.plot(dstat['epoch'], dstat[name], label=name)
+    for cpu in CPUS:
+        for name in ["usr", "sys"]:
+            name = "cpu" + str(cpu) + " usage:" + name
+            ax4.plot(dstat['epoch'], dstat[name], label=name)
 
-    print("Found %i CPU cores" % pos)
+    # print("Found %i CPU cores" % pos)
 
     ax4.set_ylabel('CPU Usage (%)')
     ax4.legend()
