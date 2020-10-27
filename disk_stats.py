@@ -20,13 +20,14 @@ LVLDB_FNAME = "foreground_stats.csv"
 WORKLOAD = "writerandomburstsbytime"
 DURATION = 100
 BATCH_SIZE = 1000
-VALUE_SIZE = 1000
+VALUE_SIZE = 100
 SYNC = 1
 BURST_LENGTH = 5
 SLEEP_DURATION = 10
-CGROUP_MEMORY_LIMIT = "50000000"
-CGROUP_CPUS = "0-7"
-CGROUP_WRITE_THRESHOLD = "8:32 100000000"
+CGROUP_MEMORY_LIMIT = "200000000"
+CGROUP_CPUS = "0-0"
+CGROUP_WRITE_THRESHOLD = "8:32 200000000"
+CGROUP_CPU_SHARE = "0"
 CPUS_RANGE = CGROUP_CPUS.split("-")
 CPUS = [cpu for cpu in range(int(CPUS_RANGE[0]), int(CPUS_RANGE[-1])+1)]
 
@@ -59,9 +60,10 @@ def create_cgroup():
     call(["sudo", "cgcreate", "-g", "blkio:ldb"])
     call(["sudo", "cgcreate", "-g", "cpuset:ldb"])
     os.system("echo " + CGROUP_MEMORY_LIMIT + " | sudo tee /sys/fs/cgroup/memory/ldb/memory.limit_in_bytes")
-    os.system("echo " + CGROUP_CPUS + " | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.cpus")
+    os.system("echo " + "0" + " | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.cpus")
     os.system("echo 0 | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.mems")
     os.system("echo \'" + CGROUP_WRITE_THRESHOLD + "\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
+    # os.system("echo " + CGROUP_CPU_SHARE + " | sudo tee /sys/fs/cgroup/cpu/ldb/cpu.shares")
 
 def run():
     print("# Loading data")
@@ -192,10 +194,10 @@ def plot():
     ax4 = fig.add_subplot(4, 1, 4)
     highlight_bursts(ax4, elapsed)
 
-    for cpu in CPUS:
-        for name in ["usr", "sys"]:
-            name = "cpu" + str(cpu) + " usage:" + name
-            ax4.plot(dstat['epoch'], dstat[name], label=name)
+    # for cpu in CPUS:
+    #     for name in ["usr", "sys"]:
+    #         name = "cpu" + str(cpu) + " usage:" + name
+    #         ax4.plot(dstat['epoch'], dstat[name], label=name)
 
     # print("Found %i CPU cores" % pos)
 
