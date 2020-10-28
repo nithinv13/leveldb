@@ -96,7 +96,6 @@ def format_compaction_stats(file_name, output_file):
             for line in lines:
                 cols = line.split(" ")
                 if "Compacting" in line:
-                    print(cols)
                     level = int(cols[3][-1])
                     time = cols[-1].split("=")[1].rstrip('\n')
                     row[header.index("start_time")] = str(time)
@@ -110,7 +109,6 @@ def format_compaction_stats(file_name, output_file):
                 elif "Compacted" in line:
                     row[header.index("compacted")] = str(cols[3] + "+" + cols[5])
                 elif "compacted to" in line:
-                    print(cols)
                     time = cols[-1].split("=")[1].rstrip('\n')
                     row[header.index("end_time")] = str(time)
                     row[header.index("version_summary_after")] = line.split(": ")[-1].rstrip("\n")
@@ -131,26 +129,18 @@ def format_memtable_compaction(file_name, output_file):
             for line in lines:
                 cols = line.split(" ")
                 if "Memtable Compaction Start" in line:
-                    time = cols[-1].rstrip("@")
+                    time = cols[-1].lstrip("@").rstrip("\n")
                     row[header.index("start_time")] = str(time)
                 elif "Level-0" in line and "bytes OK" in line:
-                    row[header.index("data_written")] = 
-                elif "Compaction stats" in line:
-                    row[header.index("data_read")] = str(float(cols[4]) / (1024*1024))
-                    row[header.index("data_written")] = str(float(cols[6]) / (1024*1024))
-                elif "Compacted" in line:
-                    row[header.index("compacted")] = str(cols[3] + "+" + cols[5])
-                elif "compacted to" in line:
-                    print(cols)
-                    time = cols[-1].split("=")[1].rstrip('\n')
+                    row[header.index("data_written")] = cols[5]
+                elif "Memtable Compaction End" in line:
+                    time = cols[-1].lstrip("@").rstrip("\n")
                     row[header.index("end_time")] = str(time)
-                    row[header.index("version_summary_after")] = line.split(": ")[-1].rstrip("\n")
                     out_file.write(",".join(row) + "\n")
                     compaction_no += 1
                     row = ["None" for _ in range(len(header))]
                     row[0] = str(compaction_no)
-
-
+                    
 def plot(x, y, x_title, y_title, output_file, color_list, widths, x_tick, y_tick):
     plt.bar(x, y, color=color_list, width=widths, align="edge")
     #plt.legend()

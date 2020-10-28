@@ -3,7 +3,7 @@
 Runs db_bench, collects disk and CPU stats, and plots the data.
 '''
 
-from subprocess import Popen, call, DEVNULL
+from subprocess import Popen, call, DEVNULL, check_output
 
 import matplotlib.pyplot as plt
 import pandas
@@ -19,15 +19,16 @@ BG_FNAME = "background_stats.csv"
 DSTAT_FNAME = "dstat.csv"
 LVLDB_FNAME = "foreground_stats.csv"
 BG_COMPACTION_DATA_FNAME = "bg_compaction_data.csv"
+MEMTABLE_COMPACTION_DATA_FNAME = "memtable_compaction_data.csv"
 WORKLOAD = "writerandomburstsbytime"
 DURATION = 100
 BATCH_SIZE = 1000
 VALUE_SIZE = 100
-SYNC = 1
+SYNC = True
 BURST_LENGTH = 5
 SLEEP_DURATION = 10
 CGROUP_MEMORY_LIMIT = "200000000"
-CGROUP_CPUS = "0-1"
+CGROUP_CPUS = "0-0"
 CGROUP_WRITE_THRESHOLD = "8:32 200000000"
 CGROUP_CPU_SHARE = "100" # A number from 0 to 1024: 1024 to allow complete CPU time
 CPUS_RANGE = CGROUP_CPUS.split("-")
@@ -65,7 +66,7 @@ def create_cgroup():
     os.system("echo " + CGROUP_CPUS + " | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.cpus")
     os.system("echo 0 | sudo tee /sys/fs/cgroup/cpuset/ldb/cpuset.mems")
     os.system("echo \'" + CGROUP_WRITE_THRESHOLD + "\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
-    os.system("echo " + CGROUP_CPU_SHARE + " | sudo tee /sys/fs/cgroup/cpu/ldb/cpu.shares")
+    # os.system("echo " + CGROUP_CPU_SHARE + " | sudo tee /sys/fs/cgroup/cpu/ldb/cpu.shares")
 
 def run():
     print("# Loading data")
@@ -77,30 +78,40 @@ def run():
     dstat = Popen(["dstat", "-C", ",".join(list(map(str, CPUS))) , "-gcdT", "--cpu-use", "--output="+DSTAT_FNAME], stdout=DEVNULL)
     print("Dstat initialized.")
 
-    call([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH,
+    dbbench = Popen([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH,
         "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1", "--value_size=%i"%VALUE_SIZE])
-    #, "--sync=%i"%SYNC)--batch_size=%i"%BATCH_SIZE])
+        # "--sync=%i"%SYNC, "--batch_size=%i"%BATCH_SIZE])
+    
+    pid = check_output(["pidof", "-s", "db_bench"]).strip().decode("utf-8") 
+    cpulimit = Popen(["cpulimit", "-p", str(pid), "-l", str(10)])
+    print(pid)
 
+    dbbench.wait()
+    cpulimit.kill()
     dstat.kill()
 
-def format_bg_compaction_data():
+def format_compaction_data():
     input_file = os.path.join("db_bench.data", "LOG")
-    print(input_file)
     output_file = os.path.join(os.getcwd(), BG_COMPACTION_DATA_FNAME)
     if os.path.exists(output_file):
         os.remove(output_file)
     stats_analyser.format_compaction_stats(input_file, output_file)
+    output_file = os.path.join(os.getcwd(), MEMTABLE_COMPACTION_DATA_FNAME)
+    if os.path.exists(output_file):
+        os.remove(output_file)
+    stats_analyser.format_memtable_compaction(input_file, output_file)
 
 def plot():
     print("# Plotting")
-    format_bg_compaction_data()
+    format_compaction_data()
+    
     burst_times = pandas.read_csv("burst_times.csv", skipinitialspace=True)
 
     dstat = pandas.read_csv(DSTAT_FNAME, header=5)
     lvldb = pandas.read_csv(LVLDB_FNAME)
     bg = pandas.read_csv(BG_FNAME)
     bg_comp = pandas.read_csv(BG_COMPACTION_DATA_FNAME)
-    print(bg_comp[:10])
+    mem_comp = pandas.read_csv(MEMTABLE_COMPACTION_DATA_FNAME)
 
     lvldb.time = lvldb.time / (1000*1000)
     bg.time = bg.time / (1000*1000)
@@ -108,6 +119,8 @@ def plot():
     burst_times.end = burst_times.end / (1000*1000)
     bg_comp.start_time = bg_comp.start_time / (1000*1000)
     bg_comp.end_time = bg_comp.end_time / (1000*1000)
+    mem_comp.start_time = mem_comp.start_time / (1000*1000)
+    mem_comp.end_time = mem_comp.end_time / (1000*1000)
 
     start_time = lvldb.time.min()
     end_time = lvldb.time.max()
@@ -118,6 +131,7 @@ def plot():
     dstat = dstat[(dstat['epoch'] >= start_time) & (dstat['epoch'] <= end_time)]
     bg = bg[(bg['time'] >= start_time) & (bg['time'] <= end_time)]
     bg_comp = bg_comp[(bg_comp['start_time'] >= start_time) & (bg_comp['end_time'] <= end_time)]
+    mem_comp = mem_comp[(mem_comp['start_time'] >= start_time) & (mem_comp['end_time'] <= end_time)]
 
     bg.time = bg.time - start_time
     lvldb.time = lvldb.time - start_time
@@ -125,7 +139,9 @@ def plot():
     bg_comp.start_time = bg_comp.start_time - start_time
     bg_comp.end_time = bg_comp.end_time - start_time
     bg_comp["widths"] = bg_comp["end_time"] - bg_comp["start_time"]
-    print(bg_comp[:10])
+    mem_comp.start_time = mem_comp.start_time - start_time 
+    mem_comp.end_time = mem_comp.end_time - start_time
+    mem_comp["widths"] = mem_comp["end_time"] - mem_comp["start_time"]
     # lvldb.loc[lvldb['time'] < 10, 'throughput'] = 0
     # dstat.loc[dstat['epoch'] < 10, 'writ'] = 0 
     # dstat.loc[dstat['epoch'] < 10, 'read'] = 0 
@@ -223,7 +239,8 @@ def plot():
     levels = bg_comp['level']
     bg_comp['colors'] = pandas.Series([colors[level] for level in levels])
     # ax4.bar(bg_comp['start_time'], bg_comp['data_read'], width=bg_comp['widths'], color=bg_comp['colors'], align="edge" label="Data read")
-    ax4.bar(bg_comp['start_time'], bg_comp['data_written'], width=bg_comp['widths'], color=bg_comp['colors'], align="edge", label="Data written")
+    # ax4.bar(mem_comp['start_time'], mem_comp['data_written'], width=mem_comp['widths'], align='edge', label="Memtable data written")
+    ax4.bar(bg_comp['start_time'], bg_comp['data_written'], width=bg_comp['widths'], color=bg_comp['colors'], align='edge', label="Data written")
     ax4.legend()
     
     ax4.set_ylabel('Data written (MB)')
