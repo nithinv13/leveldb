@@ -1121,7 +1121,7 @@ class Benchmark {
     printf("In the collect stats thread\n");
     std::ofstream myfile;
     myfile.open("background_stats.csv");
-    myfile << "time,mayBeScheduleCompactionCount,ompactionScheduledCount,memoryUsage,";
+    myfile << "time,mayBeScheduleCompactionCount,compactionScheduledCount,memoryUsage,";
     myfile << "levelWiseData,memtableSize,writeBufferSize," << std::endl;
 
     double current_time = leveldb::g_env->NowMicros();

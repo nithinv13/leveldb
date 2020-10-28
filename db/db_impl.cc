@@ -565,6 +565,8 @@ void DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
   assert(imm_ != nullptr);
 
+  Log(options_.info_log, "Memtable Compaction Start @%lu", env_->NowMicros());
+
   // Save the contents of the memtable as a new Table
   VersionEdit edit;
   Version* base = versions_->current();
@@ -592,6 +594,7 @@ void DBImpl::CompactMemTable() {
   } else {
     RecordBackgroundError(s);
   }
+  Log(options_.info_log, "Memtable Compaction End @%lu", env_->NowMicros());
 }
 
 void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
@@ -688,7 +691,6 @@ void DBImpl::MaybeScheduleCompaction() {
              !versions_->NeedsCompaction()) {
     // No work to be done
   } else {
-    compaction_scheduled_count += 1;
     background_compaction_scheduled_ = true;
     // printf("Scheduling compaction thread\n");
     // fflush(stdout);
@@ -737,6 +739,7 @@ void DBImpl::BGWork(void* db) {
 }	
 
 void DBImpl::BackgroundCall() {
+  compaction_scheduled_count += 1;
   // if (compact_mem_table_scheduled_) {
   // compact_memtable_finished_.Wait();
   // }
@@ -1002,10 +1005,10 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
   int ctr = 0;
   // printf("Starting compaction\n");
-  Log(options_.info_log, "Compacting %d@%d + %d@%d files",
+  Log(options_.info_log, "Compacting %d@%d + %d@%d files time=%lu",
       compact->compaction->num_input_files(0), compact->compaction->level(),
       compact->compaction->num_input_files(1),
-      compact->compaction->level() + 1);
+      compact->compaction->level() + 1, env_->NowMicros());
   VersionSet::LevelSummaryStorage tmp1;
   Log(options_.info_log, "Version summary: %s", versions_->LevelSummary(&tmp1));
 
@@ -1164,7 +1167,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     RecordBackgroundError(status);
   }
   VersionSet::LevelSummaryStorage tmp;
-  Log(options_.info_log, "compacted to: %s", versions_->LevelSummary(&tmp));
+  Log(options_.info_log, "compacted to: %s time=%lu", versions_->LevelSummary(&tmp), env_->NowMicros());
   return status;
 }
 

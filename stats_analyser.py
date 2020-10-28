@@ -81,21 +81,25 @@ def get_time_diff(start, end):
 def format_compaction_stats(file_name, output_file):
     header = ["compaction_no", "level", "start_time", "end_time", "version_summary_before", "compacting", "compacted", \
         "version_summary_after", "data_read", "data_written"]
+    print(file_name)
+    print(output_file)
     workload_start = 0
     compaction_no = 1
     row = ["None" for _ in range(len(header))]
     row[0] = str(compaction_no)
     with open(output_file, 'w') as out_file:
         out_file.write(",".join(header) + "\n")
+        print(file_name)
         with open(file_name) as f:
             lines = f.readlines()
             workload_start = lines[0].split()[0]
             for line in lines:
                 cols = line.split(" ")
                 if "Compacting" in line:
-                    start_time = cols[0]
+                    print(cols)
                     level = int(cols[3][-1])
-                    row[header.index("start_time")] = str(get_time_diff(workload_start, start_time))
+                    time = cols[-1].split("=")[1].rstrip('\n')
+                    row[header.index("start_time")] = str(time)
                     row[header.index("level")] = str(level)
                     row[header.index("compacting")] = str(cols[3] + "+" + cols[5])
                 elif "Version summary" in line:
@@ -106,13 +110,46 @@ def format_compaction_stats(file_name, output_file):
                 elif "Compacted" in line:
                     row[header.index("compacted")] = str(cols[3] + "+" + cols[5])
                 elif "compacted to" in line:
-                    end_time = cols[0]
-                    row[header.index("end_time")] = str(get_time_diff(workload_start, end_time))
+                    print(cols)
+                    time = cols[-1].split("=")[1].rstrip('\n')
+                    row[header.index("end_time")] = str(time)
                     row[header.index("version_summary_after")] = line.split(": ")[-1].rstrip("\n")
                     out_file.write(",".join(row) + "\n")
                     compaction_no += 1
                     row = ["None" for _ in range(len(header))]
                     row[0] = str(compaction_no)
+
+def format_memtable_compaction(file_name, output_file):
+    header = ["compaction_no", "start_time", "end_time", "data_written"]
+    compaction_no = 1
+    row = ["None" for _ in range(len(header))]
+    row[0] = str(compaction_no)
+    with open(output_file, 'w') as out_file:
+        out_file.write(",".join(header) + "\n")
+        with open(file_name) as f:
+            lines = f.readlines()
+            for line in lines:
+                cols = line.split(" ")
+                if "Memtable Compaction Start" in line:
+                    time = cols[-1].rstrip("@")
+                    row[header.index("start_time")] = str(time)
+                elif "Level-0" in line and "bytes OK" in line:
+                    row[header.index("data_written")] = 
+                elif "Compaction stats" in line:
+                    row[header.index("data_read")] = str(float(cols[4]) / (1024*1024))
+                    row[header.index("data_written")] = str(float(cols[6]) / (1024*1024))
+                elif "Compacted" in line:
+                    row[header.index("compacted")] = str(cols[3] + "+" + cols[5])
+                elif "compacted to" in line:
+                    print(cols)
+                    time = cols[-1].split("=")[1].rstrip('\n')
+                    row[header.index("end_time")] = str(time)
+                    row[header.index("version_summary_after")] = line.split(": ")[-1].rstrip("\n")
+                    out_file.write(",".join(row) + "\n")
+                    compaction_no += 1
+                    row = ["None" for _ in range(len(header))]
+                    row[0] = str(compaction_no)
+
 
 def plot(x, y, x_title, y_title, output_file, color_list, widths, x_tick, y_tick):
     plt.bar(x, y, color=color_list, width=widths, align="edge")
