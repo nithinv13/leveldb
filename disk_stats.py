@@ -3,13 +3,14 @@
 Runs db_bench, collects disk and CPU stats, and plots the data.
 '''
 
-from subprocess import Popen, call, DEVNULL, check_output
+from subprocess import Popen, call, DEVNULL, check_output, PIPE
 
 import matplotlib.pyplot as plt
 import pandas
 import os
 import argparse
 import stats_analyser
+import time
 
 # Make sure we store the db on the correct drive
 DB_PATH = "./db_bench.data"
@@ -21,7 +22,7 @@ LVLDB_FNAME = "foreground_stats.csv"
 BG_COMPACTION_DATA_FNAME = "bg_compaction_data.csv"
 MEMTABLE_COMPACTION_DATA_FNAME = "memtable_compaction_data.csv"
 WORKLOAD = "writerandomburstsbytime"
-DURATION = 100
+DURATION = 15
 BATCH_SIZE = 1000
 VALUE_SIZE = 100
 SYNC = True
@@ -32,6 +33,7 @@ CGROUP_CPUS = "0-0"
 CGROUP_WRITE_THRESHOLD = "8:32 200000000"
 CGROUP_CPU_SHARE = "100" # A number from 0 to 1024: 1024 to allow complete CPU time
 CPUS_RANGE = CGROUP_CPUS.split("-")
+CPU_LIMIT = "100"
 CPUS = [cpu for cpu in range(int(CPUS_RANGE[0]), int(CPUS_RANGE[-1])+1)]
 
 def main():
@@ -39,6 +41,7 @@ def main():
     parser.add_argument("--run", action="store_true", default=False)
     parser.add_argument("--plot", action="store_true", default=False)
     parser.add_argument("--cgroup", action="store_true", default=False)
+    parser.add_argument("--run_all_exp", action="store_true", default=False)
 
     args = parser.parse_args()
 
@@ -51,7 +54,10 @@ def main():
     if args.cgroup:
         create_cgroup()
 
-    if args.plot or args.run or args.cgroup:
+    if args.run_all_exp:
+        run_all_exp()
+
+    if args.plot or args.run or args.cgroup or args.run_all_exp:
         print("Done.")
     else:
         print("Warning: No option selected. Doing nothing.")
@@ -68,6 +74,33 @@ def create_cgroup():
     os.system("echo \'" + CGROUP_WRITE_THRESHOLD + "\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
     # os.system("echo " + CGROUP_CPU_SHARE + " | sudo tee /sys/fs/cgroup/cpu/ldb/cpu.shares")
 
+def run_all_exp():
+    cpu_limits, disk_limits, throughputs = [], [], []
+    for cpu_limit in range(10, 100, 50):
+        CPU_LIMIT = cpu_limit
+        for disk_limit in range(50, 200, 100):
+            os.system("echo \'" + "8:32 " + str(disk_limit) + "\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
+            cpu_limits.append(cpu_limit)
+            disk_limits.append(disk_limit)
+            throughput = 0
+            try: 
+                os.system("sudo rm /users/nithinv/leveldb/db_bench.data/*")
+                # create_cgroup()
+                throughput = run()
+                print("run done")
+            except:
+                continue
+            throughputs.append(throughput)
+    
+    print(cpu_limits)
+    print(disk_limits)
+    print(throughputs)
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    ax.plot_surface(cpu_limits, disk_limits, throughputs,cmap='viridis', edgecolor='none')
+    ax.set_title('Surface plot')
+    plt.savefig("3d.png")
+
 def run():
     print("# Loading data")
     call([BINPATH+"/db_bench", "--benchmarks=fillseq", "--use_existing_db=0", "--db="+DB_PATH])
@@ -78,17 +111,22 @@ def run():
     dstat = Popen(["dstat", "-C", ",".join(list(map(str, CPUS))) , "-gcdT", "--cpu-use", "--output="+DSTAT_FNAME], stdout=DEVNULL)
     print("Dstat initialized.")
 
-    dbbench = Popen([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH,
-        "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1", "--value_size=%i"%VALUE_SIZE])
+    dbbench = Popen(["sudo", "cgexec", "-g", "memory,cpuset,blkio:ldb", BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH,
+        "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1", "--value_size=%i"%VALUE_SIZE], stdout=PIPE)
         # "--sync=%i"%SYNC, "--batch_size=%i"%BATCH_SIZE])
     
+    time.sleep(1)
     pid = check_output(["pidof", "-s", "db_bench"]).strip().decode("utf-8") 
-    cpulimit = Popen(["cpulimit", "-p", str(pid), "-l", str(10)])
-    print(pid)
+    cpulimit = Popen(["cpulimit", "-p", str(pid), "-l", CPU_LIMIT])
 
+    out, err = dbbench.communicate()
+    print(out)
+    throughput = float(out.decode("utf-8").split(" ")[-2].strip())
+    print(throughput)
     dbbench.wait()
     cpulimit.kill()
     dstat.kill()
+    return throughput
 
 def format_compaction_data():
     input_file = os.path.join("db_bench.data", "LOG")
