@@ -24,11 +24,11 @@
 #include "util/random.h"
 #include "util/testutil.h"
 
-#define ENABLE_PROFILING 0
+// #define ENABLE_PROFILING 0
 
-#if ENABLE_PROFILING
-#include <gperftools/profiler.h>
-#endif
+// #if ENABLE_PROFILING
+// #include <gperftools/profiler.h>
+// #endif
 
 // Comma-separated list of operations to run in the specified order
 //   Actual benchmarks:
@@ -460,7 +460,7 @@ class Benchmark {
   }
 
   void Run() {
-    PrintHeader();
+    // PrintHeader();
     Open();
 
     const char* benchmarks = FLAGS_benchmarks;
@@ -817,6 +817,7 @@ class Benchmark {
       WriteBatch batch;
       Status s;
       int64_t bytes = 0;
+      int64_t total_time = 0;
       int64_t i = 0;
       uint64_t current_time = g_env->NowMicros();
       prev_time = g_env->NowMicros();
@@ -826,9 +827,9 @@ class Benchmark {
 
       while (g_env->NowMicros() < current_time + FLAGS_workload_duration*ONE_SECOND) {
         uint64_t time = g_env->NowMicros();
-#if ENABLE_PROFILING
-        ProfilerStart("./perf.out");
-#endif
+// #if ENABLE_PROFILING
+//         ProfilerStart("./perf.out");
+// #endif
 
         while (g_env->NowMicros() < time + FLAGS_write_time_before_sleep*ONE_SECOND) {
             batch.Clear();
@@ -862,9 +863,9 @@ class Benchmark {
                 prev_time = log_time;
             }
           }
-#if ENABLE_PROFILING
-          ProfilerStop();
-#endif
+// #if ENABLE_PROFILING
+//           ProfilerStop();
+// #endif
 
           burst_times << time << ", " << g_env->NowMicros() << std::endl;
 
@@ -878,11 +879,14 @@ class Benchmark {
                 << std::to_string(bytes / (1024*1024)) << std::endl;
               sleep(1);
            }
+           total_time += FLAGS_write_time_before_sleep;
         }
       thread->stats.AddBytes(bytes);
       shutting_down = true;
       collect_stats.join();
       printf("Total data written = %.1f MB \n", bytes / pow(1024, 2));
+      printf("Throughput:%.1f MB/s \n", bytes / pow(1024, 2) / total_time);
+      fflush(nullptr);
   }
 
   // Function to simulate periodic / bursts of writes based on number of writes
@@ -1118,7 +1122,7 @@ class Benchmark {
   }
 
   static void CollectStats(leveldb::DB* db, std::atomic<bool> *shutting_down) {
-    printf("In the collect stats thread\n");
+    // printf("In the collect stats thread\n");
     std::ofstream myfile;
     myfile.open("background_stats.csv");
     myfile << "time,mayBeScheduleCompactionCount,compactionScheduledCount,memoryUsage,";
@@ -1245,7 +1249,7 @@ int main(int argc, char** argv) {
     default_db_path += "/dbbench";
     FLAGS_db = default_db_path.c_str();
   }
-  std::cout << FLAGS_db << std::endl;
+  // std::cout << FLAGS_db << std::endl;
 
   leveldb::Benchmark benchmark;
   benchmark.Run();

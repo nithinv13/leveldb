@@ -11,6 +11,8 @@ import os
 import argparse
 import stats_analyser
 import time
+import signal
+from threading import Timer
 
 # Make sure we store the db on the correct drive
 DB_PATH = "./db_bench.data"
@@ -22,7 +24,7 @@ LVLDB_FNAME = "foreground_stats.csv"
 BG_COMPACTION_DATA_FNAME = "bg_compaction_data.csv"
 MEMTABLE_COMPACTION_DATA_FNAME = "memtable_compaction_data.csv"
 WORKLOAD = "writerandomburstsbytime"
-DURATION = 15
+DURATION = 100
 BATCH_SIZE = 1000
 VALUE_SIZE = 100
 SYNC = True
@@ -75,33 +77,34 @@ def create_cgroup():
     # os.system("echo " + CGROUP_CPU_SHARE + " | sudo tee /sys/fs/cgroup/cpu/ldb/cpu.shares")
 
 def run_all_exp():
+    f = open("3d.txt", "a")
     cpu_limits, disk_limits, throughputs = [], [], []
-    for cpu_limit in range(10, 100, 50):
+    for cpu_limit in range(10, 100, 10):
         CPU_LIMIT = cpu_limit
-        for disk_limit in range(50, 200, 100):
+        for disk_limit in range(20, 200, 20):
             os.system("echo \'" + "8:32 " + str(disk_limit) + "\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
-            cpu_limits.append(cpu_limit)
-            disk_limits.append(disk_limit)
+            cpu_limits.append(str(cpu_limit))
+            disk_limits.append(str(disk_limit))
             throughput = 0
+            # f.write("====\n");
+            # f.write(str(cpu_limit) + "\n")
+            # f.write(str(disk_limit) + "\n")
+            # f.flush()
             try: 
                 os.system("sudo rm /users/nithinv/leveldb/db_bench.data/*")
-                # create_cgroup()
-                throughput = run()
+                run(str(cpu_limit), f)
                 print("run done")
             except:
                 continue
-            throughputs.append(throughput)
     
-    print(cpu_limits)
-    print(disk_limits)
-    print(throughputs)
-    fig = plt.figure()
-    ax = plt.axes(projection='3d')
-    ax.plot_surface(cpu_limits, disk_limits, throughputs,cmap='viridis', edgecolor='none')
-    ax.set_title('Surface plot')
-    plt.savefig("3d.png")
+    
+    # fig = plt.figure()
+    # ax = plt.axes(projection='3d')
+    # ax.plot_surface(cpu_limits, disk_limits, throughputs,cmap='viridis', edgecolor='none')
+    # ax.set_title('Surface plot')
+    # plt.savefig("3d.png")
 
-def run():
+def run(cpu_limit="100", f=None):
     print("# Loading data")
     call([BINPATH+"/db_bench", "--benchmarks=fillseq", "--use_existing_db=0", "--db="+DB_PATH])
 
@@ -112,21 +115,30 @@ def run():
     print("Dstat initialized.")
 
     dbbench = Popen(["sudo", "cgexec", "-g", "memory,cpuset,blkio:ldb", BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH,
-        "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1", "--value_size=%i"%VALUE_SIZE], stdout=PIPE)
+        "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1", "--value_size=%i"%VALUE_SIZE], stdout=f)
         # "--sync=%i"%SYNC, "--batch_size=%i"%BATCH_SIZE])
     
     time.sleep(1)
     pid = check_output(["pidof", "-s", "db_bench"]).strip().decode("utf-8") 
-    cpulimit = Popen(["cpulimit", "-p", str(pid), "-l", CPU_LIMIT])
+    print(pid)
+    print(dbbench.pid)
+    cpulimit = Popen(["cpulimit", "-p", str(pid), "-l", cpu_limit])
 
-    out, err = dbbench.communicate()
-    print(out)
-    throughput = float(out.decode("utf-8").split(" ")[-2].strip())
-    print(throughput)
-    dbbench.wait()
+    # out, err = dbbench.communicate(timeout=DURATION + 5)
+    # print(out)
+    # throughput = float(out.decode("utf-8").split(" ")[-2].strip())
+    # print(throughput)
+
+    # try: 
+    #     out, err = dbbench.communicate(timeout=DURATION + 5)
+    #     print(out)
+    #     throughput = float(out.decode("utf-8").split(" ")[-2].strip())
+    #     print(throughput)
+    # except:
+    #     throughput = 0
+    dbbench.wait(timeout=DURATION+2)
     cpulimit.kill()
     dstat.kill()
-    return throughput
 
 def format_compaction_data():
     input_file = os.path.join("db_bench.data", "LOG")
