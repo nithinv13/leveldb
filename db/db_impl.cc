@@ -238,6 +238,8 @@ void DBImpl::MaybeIgnoreError(Status* s) const {
 }
 
 void DBImpl::RemoveObsoleteFiles() {
+  // printf("In the remove obolete files method");
+  // fflush(stdout);
   mutex_.AssertHeld();
 
   if (!bg_error_.ok()) {
@@ -286,6 +288,7 @@ void DBImpl::RemoveObsoleteFiles() {
       if (!keep) {
         files_to_delete.push_back(std::move(filename));
         if (type == kTableFile) {
+          // printf("Deleting table file %lld", static_cast<unsigned long long>(number));
           table_cache_->Evict(number);
         }
         Log(options_.info_log, "Delete type=%d #%lld\n", static_cast<int>(type),
@@ -823,7 +826,7 @@ void DBImpl::BackgroundCompaction() {
     }
     CleanupCompaction(compact);
     c->ReleaseInputs();
-    RemoveObsoleteFiles();
+    // RemoveObsoleteFiles();
   }
   delete c;
 
@@ -972,6 +975,9 @@ void DBImpl::UpdateThroughput() {
 
   while(!shutting_down_.load(std::memory_order_acquire)) {
       auto elapsed = env_->NowMicros() - last_write_.load(std::memory_order_acquire);
+      // env_->SleepForMicroseconds(1000);
+      // BackgroundCall();
+      
       if(elapsed > 500*1000) {
          BackgroundCall();
       } else {

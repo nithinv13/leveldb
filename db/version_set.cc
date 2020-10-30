@@ -834,6 +834,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     // If we just created a new descriptor file, install it by writing a
     // new CURRENT file that points to it.
     if (s.ok() && !new_manifest_file.empty()) {
+      // printf("Writing new manifest file %d", manifest_file_number_);
       s = SetCurrentFile(env_, dbname_, manifest_file_number_);
     }
 

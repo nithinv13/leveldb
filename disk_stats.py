@@ -13,6 +13,8 @@ import stats_analyser
 import time
 import signal
 from threading import Timer
+import sys
+import numpy as np
 
 # Make sure we store the db on the correct drive
 DB_PATH = "./db_bench.data"
@@ -28,11 +30,11 @@ DURATION = 100
 BATCH_SIZE = 1000
 VALUE_SIZE = 100
 SYNC = True
-BURST_LENGTH = 5
-SLEEP_DURATION = 10
+BURST_LENGTH = 10
+SLEEP_DURATION = 20
 CGROUP_MEMORY_LIMIT = "200000000"
 CGROUP_CPUS = "0-0"
-CGROUP_WRITE_THRESHOLD = "8:32 200000000"
+CGROUP_WRITE_THRESHOLD = "8:0 10000000"
 CGROUP_CPU_SHARE = "100" # A number from 0 to 1024: 1024 to allow complete CPU time
 CPUS_RANGE = CGROUP_CPUS.split("-")
 CPU_LIMIT = "100"
@@ -104,17 +106,18 @@ def run_all_exp():
     # ax.set_title('Surface plot')
     # plt.savefig("3d.png")
 
-def run(cpu_limit="100", f=None):
+def run(cpu_limit="100", f=sys.stdout):
+    cpu_limit = "100"
     print("# Loading data")
     call([BINPATH+"/db_bench", "--benchmarks=fillseq", "--use_existing_db=0", "--db="+DB_PATH])
-
+    time.sleep(2)
     print("# Running Benchmark")
     if os.path.exists(DSTAT_FNAME):
         os.remove(DSTAT_FNAME) #dstat appends by default
     dstat = Popen(["dstat", "-C", ",".join(list(map(str, CPUS))) , "-gcdT", "--cpu-use", "--output="+DSTAT_FNAME], stdout=DEVNULL)
     print("Dstat initialized.")
-
-    dbbench = Popen(["sudo", "cgexec", "-g", "memory,cpuset,blkio:ldb", BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH,
+    # "sudo", "cgexec", "-g", "memory,cpuset,blkio:ldb",
+    dbbench = Popen([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH,
         "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1", "--value_size=%i"%VALUE_SIZE], stdout=f)
         # "--sync=%i"%SYNC, "--batch_size=%i"%BATCH_SIZE])
     
@@ -136,7 +139,8 @@ def run(cpu_limit="100", f=None):
     #     print(throughput)
     # except:
     #     throughput = 0
-    dbbench.wait(timeout=DURATION+2)
+    # dbbench.wait(timeout=DURATION+5)
+    dbbench.wait()
     cpulimit.kill()
     dstat.kill()
 
@@ -200,23 +204,20 @@ def plot():
         for _, row in burst_times.iterrows():
             ax.axvspan(row["start"] - start_time, row["end"] - start_time, alpha=0.25, lw=0)
 
-    fig = plt.figure(figsize=(16,10))
-    ax1 = fig.add_subplot(4, 1, 1)
+    fig = plt.figure(figsize=(20,10))
+    ax1 = fig.add_subplot(5, 1, 1)
     highlight_bursts(ax1, elapsed)
 
     # Dstat reports in kB while leveldb does in bytes
-    print(dstat['writ'])
-    print(lvldb['throughput'])
+    print(len(dstat['writ']))
+    print(len(dstat['epoch']))
     ax1.plot(dstat['epoch'], dstat['writ'], label="Disk writes")
     ax1.plot(dstat['epoch'], dstat['read'], label="Disk reads")
     ax1.plot(lvldb['time'], lvldb['throughput'], label='LevelDB writes')
-
     ax1.set_ylabel('Throughput (B/s)')
-    #ax1.set_xlabel('Time (seconds)')
-
     ax1.legend()
 
-    ax2 = fig.add_subplot(4, 1, 2)
+    ax2 = fig.add_subplot(5, 1, 2)
     highlight_bursts(ax2, elapsed)
     level_data = {-1: [(i) for i in bg["memoryUsage"]]}
 
@@ -251,11 +252,10 @@ def plot():
         sizes.append(size)
 
     ax2.stackplot(bg['time'], sizes, labels=labels)
-
     ax2.set_ylabel('Size (Mb)')
     ax2.legend()
 
-    ax3 = fig.add_subplot(4, 1, 3)
+    ax3 = fig.add_subplot(5, 1, 3)
     highlight_bursts(ax3, elapsed)
 
     cpus = CGROUP_CPUS.split("-")
@@ -276,7 +276,7 @@ def plot():
     ax3.set_ylabel('CPU Usage (%)')
     ax3.legend()
 
-    ax4 = fig.add_subplot(4, 1, 4)
+    ax4 = fig.add_subplot(5, 1, 4)
     highlight_bursts(ax4, elapsed)
 
     # for cpu in CPUS:
@@ -289,61 +289,22 @@ def plot():
     levels = bg_comp['level']
     bg_comp['colors'] = pandas.Series([colors[level] for level in levels])
     # ax4.bar(bg_comp['start_time'], bg_comp['data_read'], width=bg_comp['widths'], color=bg_comp['colors'], align="edge" label="Data read")
+    ax4.bar(bg_comp['start_time'], bg_comp['data_written'], width=bg_comp['widths'], align='edge')
     # ax4.bar(mem_comp['start_time'], mem_comp['data_written'], width=mem_comp['widths'], align='edge', label="Memtable data written")
-    ax4.bar(bg_comp['start_time'], bg_comp['data_written'], width=bg_comp['widths'], color=bg_comp['colors'], align='edge', label="Data written")
-    ax4.legend()
+    # ax4.legend()
     
-    ax4.set_ylabel('Data written (MB)')
-    ax4.legend()
+    ax4.set_ylabel('BG Compaction \n data written (MB)')
     ax4.set_xlabel('Time (seconds)')
+    ax4.set_xticks(np.arange(0, 125, 20.0))
 
+    ax5 = fig.add_subplot(5, 1, 5)
+    highlight_bursts(ax5, elapsed)
+    ax5.bar(mem_comp['start_time'], mem_comp['data_written'] / (1024*1024), width=mem_comp['widths'], align='edge', label="Memtable data written")
+    ax5.set_ylabel('Compaction memtable \n data written (MB)')
+    ax5.set_xlabel('Time (seconds)')
+    ax5.set_xticks(np.arange(0, 125, 20.0))
 
     fig.savefig('dstat.pdf')
-
-def plot_compaction_data(input_file, total_time):
-    with open(input_file) as f:
-        lines = f.readlines()
-        header = lines[0].rstrip("\n").split(",")
-        colors = ["0.9", "0.6", "0.3", "0.05"]
-        total_data_read = 0 
-        total_data_written = 0
-        x, color_list = [], []
-        y_read, y_written = [], []
-        y_read_total, y_written_total = [], []
-        widths = []
-        minx = float(lines[1][2])
-        for line in lines[1:]:
-            line = line.split(",")
-            x.append(float(line[header.index("start_time")]) + minx)
-            level = int(line[header.index("level")])
-            data_read, data_written = float(line[header.index("data_read")]), float(line[header.index("data_written")])
-            total_data_read += data_read
-            total_data_written += data_written
-            y_read.append(data_read)
-            y_written.append(data_written)
-            y_read_total.append(total_data_read)
-            y_written_total.append(total_data_written)
-            color_list.append(colors[level])
-            widths.append(float(line[header.index("end_time")])-float(line[header.index("start_time")]))
-        
-        # fig = initialize_fig()
-        # plot(x, y_read_total, "time", "Total compaction data read (MB)", HOME + "/compaction_graphs/compaction_data_read_total.png", \
-        #     color_list, widths, 10, 100)
-        # plot(x, y_written_total, "time", "Total compaction data written (MB)", HOME + "/compaction_graphs/compaction_data_written_total.png", \
-        #     color_list, widths, 10, 100)
-        plot(x, y_read, "time", "Compaction data read (MB)", HOME + "/compaction_graphs/compaction_data_read.png", \
-            color_list, widths, 10, 100)
-        plot(x, y_written, "time", "Compaction data written (MB)", HOME + "/compaction_graphs/compaction_data_written.png", \
-            color_list, widths, 10, 100)
-        ax1 = special_plot(fig, x, y_read, "time", "Compaction data \n read (MB)", color_list, widths, 10, 200, 311)
-        ax2 = special_plot(fig, x, y_written, "time", "Compaction data \n written (MB)", color_list, widths, 10, 200, 312)
-        x_data, y_data = plotter("./build/foreground_stats.csv", "time", "data_written", HOME + "/graphs/data_written" + extra + ".png", "time", "Total data written (MB)", ret=True)
-        ax3 = special_plot(fig, x_data, y_data, "time", "Total data \n written", None, None, 10, 200, 313)
-        plt.subplot(ax1)
-        plt.subplot(ax2)
-        plt.subplot(ax3)
-        plt.savefig(HOME + "/graphs/tester.png")
-
 
 if __name__ == "__main__":
     main()
