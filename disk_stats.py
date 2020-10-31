@@ -34,7 +34,7 @@ BURST_LENGTH = 10
 SLEEP_DURATION = 20
 CGROUP_MEMORY_LIMIT = "200000000"
 CGROUP_CPUS = "0-0"
-CGROUP_WRITE_THRESHOLD = "8:0 10000000"
+CGROUP_WRITE_THRESHOLD = "8:32 200000000"
 CGROUP_CPU_SHARE = "100" # A number from 0 to 1024: 1024 to allow complete CPU time
 CPUS_RANGE = CGROUP_CPUS.split("-")
 CPU_LIMIT = "100"
@@ -107,7 +107,6 @@ def run_all_exp():
     # plt.savefig("3d.png")
 
 def run(cpu_limit="100", f=sys.stdout):
-    cpu_limit = "100"
     print("# Loading data")
     call([BINPATH+"/db_bench", "--benchmarks=fillseq", "--use_existing_db=0", "--db="+DB_PATH])
     time.sleep(2)
@@ -211,10 +210,10 @@ def plot():
     # Dstat reports in kB while leveldb does in bytes
     print(len(dstat['writ']))
     print(len(dstat['epoch']))
-    ax1.plot(dstat['epoch'], dstat['writ'], label="Disk writes")
-    ax1.plot(dstat['epoch'], dstat['read'], label="Disk reads")
-    ax1.plot(lvldb['time'], lvldb['throughput'], label='LevelDB writes')
-    ax1.set_ylabel('Throughput (B/s)')
+    ax1.plot(dstat['epoch'], dstat['writ'] / (1024*1024), label="Disk writes")
+    ax1.plot(dstat['epoch'], dstat['read'] / (1024*1024), label="Disk reads")
+    ax1.plot(lvldb['time'], lvldb['throughput'] / (1024*1024), label='LevelDB writes')
+    ax1.set_ylabel('Throughput (MB/s)')
     ax1.legend()
 
     ax2 = fig.add_subplot(5, 1, 2)
@@ -286,12 +285,20 @@ def plot():
 
     # print("Found %i CPU cores" % pos)
     colors = {0:'orange', 1:'green', 2:'red', 3:'purple'}
+    labels = {0:'Level 0 to Level 1', 1:'Level 1 to Level 2', 2:'Level 2 to Level 3', 3:'Level 3 to Level 4'}
     levels = bg_comp['level']
     bg_comp['colors'] = pandas.Series([colors[level] for level in levels])
+    bg_comp['labels'] = pandas.Series([labels[level] for level in levels])
+    for level in set(bg_comp['level']):
+        data = bg_comp[bg_comp['level'] == level]
+        x, y, widths = data['start_time'], data['data_written'], data['widths']
+        color, label = colors[level], labels[level]
+        ax4.bar(x, y, width=widths, color=color, label=label, align='edge')
     # ax4.bar(bg_comp['start_time'], bg_comp['data_read'], width=bg_comp['widths'], color=bg_comp['colors'], align="edge" label="Data read")
-    ax4.bar(bg_comp['start_time'], bg_comp['data_written'], width=bg_comp['widths'], align='edge')
+    # ax4.bar(bg_comp['start_time'], bg_comp['data_written'], width=bg_comp['widths'], color=bg_comp['colors'], label={'orange':'Level 0', 'green':'Level 1', 'red':'Level 2', 'purple':'Level 3'}, align='edge')
     # ax4.bar(mem_comp['start_time'], mem_comp['data_written'], width=mem_comp['widths'], align='edge', label="Memtable data written")
-    # ax4.legend()
+    
+    ax4.legend()
     
     ax4.set_ylabel('BG Compaction \n data written (MB)')
     ax4.set_xlabel('Time (seconds)')

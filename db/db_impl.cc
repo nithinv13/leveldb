@@ -975,15 +975,15 @@ void DBImpl::UpdateThroughput() {
 
   while(!shutting_down_.load(std::memory_order_acquire)) {
       auto elapsed = env_->NowMicros() - last_write_.load(std::memory_order_acquire);
-      // env_->SleepForMicroseconds(1000);
-      // BackgroundCall();
+      env_->SleepForMicroseconds(1000);
+      BackgroundCall();
       
-      if(elapsed > 500*1000) {
-         BackgroundCall();
-      } else {
-         // FIXME do not busy wait
-         env_->SleepForMicroseconds(1000);
-      }
+      // if(elapsed > 500*1000) {
+      //    BackgroundCall();
+      // } else {
+      //    // FIXME do not busy wait
+      //    env_->SleepForMicroseconds(1000);
+      // }
      /*
     int updated_interval = compaction_times[ctr]*1000 - prev_compaction*1000 + (compaction_start - compaction_end)/1e3;
     // if (env_->NowMicros() + interval*1000 < start_time + WORKLOAD_DURATION) {
