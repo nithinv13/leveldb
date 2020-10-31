@@ -273,7 +273,7 @@ def plot():
     # print("Found %i CPU cores" % pos)
 
     ax3.set_ylabel('CPU Usage (%)')
-    ax3.legend()
+    # ax3.legend()
 
     ax4 = fig.add_subplot(5, 1, 4)
     highlight_bursts(ax4, elapsed)
