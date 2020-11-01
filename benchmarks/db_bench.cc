@@ -138,6 +138,8 @@ static int FLAGS_workload_duration = 120;
 static int FLAGS_write_time_before_sleep = 10;
 static int FLAGS_sleep_duration = 2;
 static int FLAGS_write_count_before_sleep = 10000;
+static int FLAGS_disk_write_limit = 200;
+static int FLAGS_cpu_limit = 100;
 
 constexpr uint64_t ONE_SECOND = 1000*1000;
 
@@ -841,7 +843,8 @@ class Benchmark {
               bytes += value_size_ + strlen(key);
               thread->stats.FinishedSingleOp();
             }
-            //write_options_.sync = true;
+            write_options_.sync = true;
+            entries_per_batch_ = 1000;
             s = db_->Write(write_options_, &batch);
             if (!s.ok()) {
               std::fprintf(stderr, "put error: %s\n", s.ToString().c_str());
@@ -884,6 +887,8 @@ class Benchmark {
       thread->stats.AddBytes(bytes);
       shutting_down = true;
       collect_stats.join();
+      printf("Disk limit = %d MB/s \n", FLAGS_disk_write_limit);
+      printf("CPU limit = %d \n", FLAGS_cpu_limit);
       printf("Total data written = %.1f MB \n", bytes / pow(1024, 2));
       printf("Throughput:%.1f MB/s \n", bytes / pow(1024, 2) / total_time);
       fflush(nullptr);
@@ -1230,6 +1235,10 @@ int main(int argc, char** argv) {
       FLAGS_write_time_before_sleep = n;
     } else if (sscanf(argv[i], "--write_count_before_sleep=%d%c", &n, &junk) == 1) {
       FLAGS_write_count_before_sleep = n;
+    } else if (sscanf(argv[i], "--disk_write_limit=%d%c", &n, &junk) == 1) {
+      FLAGS_disk_write_limit = n;
+    } else if (sscanf(argv[i], "--cpu_limit=%d%c", &n, &junk) == 1) {
+      FLAGS_cpu_limit = n;
     }
     else if (strncmp(argv[i], "--db=", 5) == 0) {
       FLAGS_db = argv[i] + 5;

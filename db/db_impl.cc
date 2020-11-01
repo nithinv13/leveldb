@@ -831,7 +831,7 @@ void DBImpl::BackgroundCompaction() {
     }
     CleanupCompaction(compact);
     c->ReleaseInputs();
-    if (DEFAULT) { RemoveObsoleteFiles(); }
+    if (true) { RemoveObsoleteFiles(); }
   }
   delete c;
 

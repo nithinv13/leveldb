@@ -79,26 +79,13 @@ def create_cgroup():
     # os.system("echo " + CGROUP_CPU_SHARE + " | sudo tee /sys/fs/cgroup/cpu/ldb/cpu.shares")
 
 def run_all_exp():
-    f = open("3d.txt", "a")
-    cpu_limits, disk_limits, throughputs = [], [], []
-    for cpu_limit in range(10, 100, 10):
-        CPU_LIMIT = cpu_limit
-        for disk_limit in range(20, 200, 20):
+    f = open("all_exp.txt", "w")
+    for cpu_limit in range(10, 100, 50):
+        for disk_limit in range(50, 200, 100):
             os.system("echo \'" + "8:32 " + str(disk_limit) + "\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
-            cpu_limits.append(str(cpu_limit))
-            disk_limits.append(str(disk_limit))
-            throughput = 0
-            # f.write("====\n");
-            # f.write(str(cpu_limit) + "\n")
-            # f.write(str(disk_limit) + "\n")
-            # f.flush()
-            try: 
-                os.system("sudo rm /users/nithinv/leveldb/db_bench.data/*")
-                run(str(cpu_limit), f)
-                print("run done")
-            except:
-                continue
-    
+            os.system("sudo rm /users/nithinv/leveldb/db_bench.data/*")
+            run(cpu_limit, disk_limit, f)
+            print("run done")
     
     # fig = plt.figure()
     # ax = plt.axes(projection='3d')
@@ -106,7 +93,7 @@ def run_all_exp():
     # ax.set_title('Surface plot')
     # plt.savefig("3d.png")
 
-def run(cpu_limit="100", f=sys.stdout):
+def run(cpu_limit = 100, disk_limit = 200, f=sys.stdout):
     print("# Loading data")
     call([BINPATH+"/db_bench", "--benchmarks=fillseq", "--use_existing_db=0", "--db="+DB_PATH])
     time.sleep(2)
@@ -116,15 +103,15 @@ def run(cpu_limit="100", f=sys.stdout):
     dstat = Popen(["dstat", "-C", ",".join(list(map(str, CPUS))) , "-gcdT", "--cpu-use", "--output="+DSTAT_FNAME], stdout=DEVNULL)
     print("Dstat initialized.")
     # "sudo", "cgexec", "-g", "memory,cpuset,blkio:ldb",
-    dbbench = Popen([BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH,
-        "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1", "--value_size=%i"%VALUE_SIZE], stdout=f)
+    dbbench = Popen(["sudo", "cgexec", "-g", "memory,cpuset,blkio:ldb", BINPATH+"/db_bench", "--benchmarks="+WORKLOAD, "--sleep_duration=%i"%SLEEP_DURATION, "--write_time_before_sleep=%i"%BURST_LENGTH,
+        "--workload_duration=%i" % DURATION, "--db="+DB_PATH, "--use_existing_db=1", "--value_size=%i"%VALUE_SIZE, "--disk_write_limit=%i"%disk_limit, "--cpu_limit=%i"%cpu_limit], stdout=f)
         # "--sync=%i"%SYNC, "--batch_size=%i"%BATCH_SIZE])
     
     time.sleep(1)
     pid = check_output(["pidof", "-s", "db_bench"]).strip().decode("utf-8") 
     print(pid)
     print(dbbench.pid)
-    cpulimit = Popen(["cpulimit", "-p", str(pid), "-l", cpu_limit])
+    cpulimit = Popen(["cpulimit", "-p", str(pid), "-l", str(cpu_limit)])
 
     # out, err = dbbench.communicate(timeout=DURATION + 5)
     # print(out)
@@ -139,7 +126,7 @@ def run(cpu_limit="100", f=sys.stdout):
     # except:
     #     throughput = 0
     # dbbench.wait(timeout=DURATION+5)
-    dbbench.wait()
+    dbbench.wait(timeout=DURATION+5)
     cpulimit.kill()
     dstat.kill()
 
