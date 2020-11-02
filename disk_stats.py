@@ -34,7 +34,7 @@ BURST_LENGTH = 10
 SLEEP_DURATION = 20
 CGROUP_MEMORY_LIMIT = "200000000"
 CGROUP_CPUS = "0-0"
-CGROUP_WRITE_THRESHOLD = "8:32 200000000"
+CGROUP_WRITE_THRESHOLD = "8:32 40000000"
 CGROUP_CPU_SHARE = "100" # A number from 0 to 1024: 1024 to allow complete CPU time
 CPUS_RANGE = CGROUP_CPUS.split("-")
 CPU_LIMIT = "100"
@@ -79,7 +79,7 @@ def create_cgroup():
     # os.system("echo " + CGROUP_CPU_SHARE + " | sudo tee /sys/fs/cgroup/cpu/ldb/cpu.shares")
 
 def run_all_exp():
-    f = open("all_exp.txt", "w")
+    f = open("all_exp.txt", "a")
     for cpu_limit in range(10, 100, 50):
         for disk_limit in range(50, 200, 100):
             os.system("echo \'" + "8:32 " + str(disk_limit) + "\' | sudo tee /sys/fs/cgroup/blkio/ldb/blkio.throttle.write_bps_device")
@@ -126,7 +126,7 @@ def run(cpu_limit = 100, disk_limit = 200, f=sys.stdout):
     # except:
     #     throughput = 0
     # dbbench.wait(timeout=DURATION+5)
-    dbbench.wait(timeout=DURATION+5)
+    dbbench.wait()
     cpulimit.kill()
     dstat.kill()
 
@@ -260,7 +260,7 @@ def plot():
     # print("Found %i CPU cores" % pos)
 
     ax3.set_ylabel('CPU Usage (%)')
-    # ax3.legend()
+    ax3.legend()
 
     ax4 = fig.add_subplot(5, 1, 4)
     highlight_bursts(ax4, elapsed)
